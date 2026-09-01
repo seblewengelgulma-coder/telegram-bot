@@ -43,8 +43,8 @@ const requestSchema = new mongoose.Schema({
     type: { type: String, required: true },
     amount: { type: Number, required: true },
     details: { type: String, required: true },
-    photoId: { type: String, unique: true, sparse: true }, 
-    transactionId: { type: String, unique: true, sparse: true }, 
+    photoId: { type: String, sparse: true }, 
+    transactionId: { type: String, sparse: true }, 
     date: { type: Date, default: Date.now }
 });
 const RequestModel = mongoose.model('Request', requestSchema);
@@ -459,6 +459,67 @@ bot.hears('📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', async (ctx) => {
     }
 });
 
+// --- 🛠 የዲፖዚት እና ዊዝድሮ ጥያቄዎችን መቀበል/ማስተካከል (Approve / Reject Handlers) ---
+bot.action(/approve_req_(.+)/, async (ctx) => {
+    if (ctx.from.id !== ADMIN_ID) return;
+    let reqId = ctx.match[1];
+    let request = await RequestModel.findById(reqId);
+    
+    if (!request) {
+        return ctx.answerCbQuery('❌ ይህ ጥያቄ უკვე ተሰርዟል ወይም የለም!', { show_alert: true });
+    }
+
+    let targetUser = await getOrCreateUser(request.userId);
+
+    if (request.type === 'deposit') {
+        targetUser.balance += request.amount;
+        await targetUser.save();
+        
+        // ተጠቃሚውን ማሳወቅ
+        bot.telegram.sendMessage(request.userId, `🎉 **የዲፖዚት ጥያቄዎ ጸድቋል!**\n💰 አካውንትዎ ላይ **ETB ${request.amount}** ተጨምሯል።`).catch(() => {});
+        ctx.editMessageCaption(`✅ **የዲፖዚት ጥያቄ ጸድቋል! (Approved)**\n👤 ${request.userName} - ETB ${request.amount}`).catch(() => {
+            ctx.editMessageText(`✅ **የዲፖዚት ጥያቄ ጸድቋል! (Approved)**\n👤 ${request.userName} - ETB ${request.amount}`).catch(() => {});
+        });
+    } else if (request.type === 'withdraw') {
+        // ዊዝድሮ ቀድሞ ተቀንሷል፣ አሁን ጥያቄው ጸድቋል
+        bot.telegram.sendMessage(request.userId, `🎉 **የዊዝድሮ ጥያቄዎ ጸድቋል!**\n💵 ገንዘቡ ወደ ስልክ ቁጥርዎ (${targetUser.phone}) ተልኳል።`).catch(() => {});
+        ctx.editMessageCaption(`✅ **የዊዝድሮ ጥያቄ ጸድቋል! (Approved)**\n👤 ${request.userName} - ETB ${request.amount}`).catch(() => {
+            ctx.editMessageText(`✅ **የዊዝድሮ ጥያቄ ጸድቋል! (Approved)**\n👤 ${request.userName} - ETB ${request.amount}`).catch(() => {});
+        });
+    }
+
+    await RequestModel.findByIdAndDelete(reqId);
+    ctx.answerCbQuery('✅ ጥያቄው በተሳካ ሁኔታ ጸድቋል!');
+});
+
+bot.action(/reject_req_(.+)/, async (ctx) => {
+    if (ctx.from.id !== ADMIN_ID) return;
+    let reqId = ctx.match[1];
+    let request = await RequestModel.findById(reqId);
+
+    if (!request) {
+        return ctx.answerCbQuery('❌ ይህ ጥያቄ უკვე ተሰርዟል ወይም የለም!', { show_alert: true });
+    }
+
+    let targetUser = await getOrCreateUser(request.userId);
+
+    if (request.type === 'deposit') {
+        bot.telegram.sendMessage(request.userId, `❌ **የዲፖዚት ጥያቄዎ ውድቅ ተደርጓል!**\nእባክዎ ትክክለኛ መረጃ መላክዎን ያረጋግጡ።`).catch(() => {});
+    } else if (request.type === 'withdraw') {
+        // ዊዝድሮ ውድቅ ሲደረግ ቀድሞ ተቀንሶ የነበረው ገንዘብ ተመልሶ ለተጠቃሚው ይገባል
+        targetUser.balance += request.amount;
+        await targetUser.save();
+        bot.telegram.sendMessage(request.userId, `❌ **የዊዝድሮ ጥያቄዎ ውድቅ ተደርጓል!**\n💰 ETB ${request.amount} ተመላሽ ወደ አካውንትዎ ገብቷል።`).catch(() => {});
+    }
+
+    ctx.editMessageCaption(`❌ **የጥያቄ ውድቅ ተደርጓል! (Rejected)**\n👤 ${request.userName} - ETB ${request.amount}`).catch(() => {
+        ctx.editMessageText(`❌ **የጥያቄ ውድቅ ተደርጓል! (Rejected)**\n👤 ${request.userName} - ETB ${request.amount}`).catch(() => {});
+    });
+
+    await RequestModel.findByIdAndDelete(reqId);
+    ctx.answerCbQuery('❌ ጥያቄው ውድቅ ተደርጓል!');
+});
+
 bot.hears('💬 የተጫዋቾች ኮሜንቶች', async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     let comments = await CommentModel.find().sort({ date: -1 }).limit(15);
@@ -645,14 +706,6 @@ bot.action('check_bingo', async (ctx) => {
         ctx.answerCbQuery('🏆 እንኳን ደስ አሎት!');
     } else {
         return ctx.answerCbQuery('❌ ገና BINGO አልሞሉም!', { show_alert: true });
-    }
-});
-
-bot.on('photo', async (ctx) => {
-    const userId = ctx.from.id;
-    const userName = ctx.from.first_name || 'ተጫዋች';
-    if (userSteps[userId] && userSteps[userId].action === 'deposit_amount') {
-        // Handle photo deposit directly if needed or via text
     }
 });
 
