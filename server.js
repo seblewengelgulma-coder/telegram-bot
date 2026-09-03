@@ -247,13 +247,31 @@ bot.action('select_bingo', (ctx) => {
     );
 });
 
-bot.action('select_keno', async (ctx) => {
+// --- የኬኖ ዋጋ መምረጫ ---
+bot.action('select_keno', (ctx) => {
+    ctx.editMessageText(
+        `🎲 **የኬኖ ጨዋታ - የውርርድ መጠን ይምረጡ:**\n\nእባክዎ መጫወት የሚፈልጉትን የብር መጠን ይምረጡ:`,
+        Markup.inlineKeyboard([
+            [Markup.button.callback('10 ETB', 'keno_bet_10'), Markup.button.callback('20 ETB', 'keno_bet_20')],
+            [Markup.button.callback('50 ETB', 'keno_bet_50'), Markup.button.callback('100 ETB', 'keno_bet_100')],
+            [Markup.button.callback('🔙 ወደ ዋናው ሜኑ', 'back_to_main_menu')]
+        ])
+    );
+});
+
+bot.action(/keno_bet_(\d+)/, async (ctx) => {
     const userId = ctx.from.id;
+    const betAmount = parseInt(ctx.match[1]);
     let user = await getOrCreateUser(userId);
-    kenoSessions[userId] = { selectedNumbers: [], betAmount: 10 };
+
+    if (userId !== ADMIN_ID && user.balance < betAmount) {
+        return ctx.answerCbQuery(`❌ በቂ ባላንስ የለዎትም! (የመረጡት: ${betAmount} ብር)`, { show_alert: true });
+    }
+
+    kenoSessions[userId] = { selectedNumbers: [], betAmount: betAmount };
 
     ctx.editMessageText(
-        `🎲 **ኬኖ ጨዋታ**\n\nከ 1 እስከ 80 ካሉት ቁጥሮች **ከ 1 እስከ 10 ቁጥሮች** ይምረጡ (አሁን የተመረጡ: 0):\n\nአካውንት ባላንስ: **ETB ${user.balance.toFixed(2)}**`,
+        `🎲 **ኬኖ ጨዋታ (የውርርድ መጠን: ${betAmount} ETB)**\n\nከ 1 እስከ 80 ካሉት ቁጥሮች **ከ 1 እስከ 10 ቁጥሮች** ይምረጡ (አሁን የተመረጡ: 0):\n\nአካውንት ባላንስ: **ETB ${user.balance.toFixed(2)}**`,
         getKenoKeyboard([])
     );
 });
@@ -278,12 +296,12 @@ bot.action(/keno_num_(\d+)/, async (ctx) => {
 
     let user = await getOrCreateUser(userId);
     ctx.editMessageText(
-        `🎲 **ኬኖ ጨዋታ**\n\nየመረጧቸው ቁጥሮች: [ **${session.selectedNumbers.sort((a,b)=>a-b).join(', ')}** ] (${session.selectedNumbers.length}/10)\n\nአካውንት ባላንስ: **ETB ${user.balance.toFixed(2)}**`,
+        `🎲 **ኬኖ ጨዋታ (የውርርድ መጠን: ${session.betAmount} ETB)**\n\nየመረጧቸው ቁጥሮች: [ **${session.selectedNumbers.sort((a,b)=>a-b).join(', ')}** ] (${session.selectedNumbers.length}/10)\n\nአካውንት ባላንስ: **ETB ${user.balance.toFixed(2)}**`,
         getKenoKeyboard(session.selectedNumbers)
     ).catch(()=>{});
 });
 
-// --- ኬኖ ድሮ (Draw) ማከናወኛ ---
+// --- ኬኖ በየ 3 ሰከንድ የሚወጣ አውቶ ድሮ (Auto Draw with 3 Seconds Interval) ---
 bot.action('start_keno_draw', async (ctx) => {
     const userId = ctx.from.id;
     let session = kenoSessions[userId];
@@ -292,57 +310,107 @@ bot.action('start_keno_draw', async (ctx) => {
     }
 
     let user = await getOrCreateUser(userId);
-    let betAmount = 10; // ቋሚ የካርታ ዋጋ (ወይም በምትፈልጉት መቀየር ይቻላል)
+    let betAmount = session.betAmount;
 
-    if (user.balance < betAmount) {
-        return ctx.answerCbQuery('❌ በቂ ባላንስ የለዎትም! እባክዎ ዲፖዚት ያድርጉ።', { show_alert: true });
+    if (userId !== ADMIN_ID && user.balance < betAmount) {
+        return ctx.answerCbQuery('❌ በቂ ባላንስ የለዎትም!', { show_alert: true });
     }
 
-    user.balance -= betAmount;
-    user.totalGames += 1;
+    if (userId !== ADMIN_ID) {
+        user.balance -= betAmount;
+        user.totalGames += 1;
+        await user.save();
+    }
 
-    // 20 ቁጥሮች ከ 80 ማውጣት
-    let drawnNumbers = [];
+    await ctx.answerCbQuery('🎲 የኬኖ ጨዋታ ተጀምሯል! ቁጥሮች በየ 3 ሰከንድ ይወጣሉ...');
+
     let allNums = Array.from({length: 80}, (_, i) => i + 1);
+    let drawnNumbers = [];
     while(drawnNumbers.length < 20) {
         let rIdx = Math.floor(Math.random() * allNums.length);
         drawnNumbers.push(allNums.splice(rIdx, 1)[0]);
     }
 
-    let matches = session.selectedNumbers.filter(n => drawnNumbers.includes(n));
-    let matchCount = matches.length;
-    let winAmount = 0;
+    let currentDrawnIndex = 0;
+    let displayedDrawn = [];
 
-    // የሽልማት ሰንጠረዥ (ለማሳያ ያህል)
-    if (matchCount >= 5) {
-        winAmount = betAmount * matchCount * 2;
-    }
+    let drawInterval = setInterval(async () => {
+        if (currentDrawnIndex < drawnNumbers.length) {
+            displayedDrawn.push(drawnNumbers[currentDrawnIndex]);
+            currentDrawnIndex++;
 
-    if (winAmount > 0) {
-        user.balance += winAmount;
-        user.wins += 1;
-        user.level += 1;
-    } else {
-        user.losses += 1;
-    }
-    await user.save();
+            let matchesCount = session.selectedNumbers.filter(n => displayedDrawn.includes(n)).length;
 
-    let resultMsg = `🎲 **የኬኖ ጨዋታ ውጤት**\n\n` +
-        `🎯 የመረጧቸው: [ ${session.selectedNumbers.sort((a,b)=>a-b).join(', ')} ]\n` +
-        `球 የወጡት 20 ቁጥሮች: [ ${drawnNumbers.sort((a,b)=>a-b).join(', ')} ]\n` +
-        `✨ ትክክለኛ ግጥሚያዎች: **${matchCount}** ቁጥር\n` +
-        `💰 ያሸነፉት ገንዘብ: **ETB ${winAmount.toFixed(2)}**\n\n` +
-        `💼 የቀረ ባላንስ: **ETB ${user.balance.toFixed(2)}**`;
+            try {
+                await ctx.editMessageText(
+                    `🎲 **የኬኖ ጨዋታ በሂደት ላይ... (የውርርድ መጠን: ${betAmount} ETB)**\n\n` +
+                    `🎯 የመረጧቸው: [ **${session.selectedNumbers.sort((a,b)=>a-b).join(', ')}** ]\n` +
+                    `🔴 የወጡ ቁጥሮች: [ ${displayedDrawn.join(', ')} ]\n` +
+                    `✨ ትክክለኛ ግጥሚያዎች: **${matchesCount}** ቁጥር`,
+                    Markup.inlineKeyboard([])
+                );
+            } catch (e) {}
+        } else {
+            clearInterval(drawInterval);
 
-    delete kenoSessions[userId];
-    ctx.editMessageText(resultMsg, Markup.inlineKeyboard([
-        [Markup.button.callback('🎮 እንደገና ኬኖ አጫወት', 'select_keno')],
-        [Markup.button.callback('🔙 ወደ ዋናው ሜኑ', 'back_to_main_menu')]
-    ]));
+            let matches = session.selectedNumbers.filter(n => drawnNumbers.includes(n));
+            let matchCount = matches.length;
+            let winAmount = 0;
+
+            if (matchCount >= 5) {
+                winAmount = betAmount * matchCount * 1.5;
+            } else if (matchCount >= 8) {
+                winAmount = betAmount * matchCount * 3;
+            }
+
+            let resultMsg = "";
+            let keyboardOptions = [];
+
+            if (winAmount > 0) {
+                if (userId !== ADMIN_ID) {
+                    user.balance += winAmount;
+                    user.wins += 1;
+                    user.level += 1;
+                    await user.save();
+                }
+
+                resultMsg = `🎉 **እንኳን ደስ አሎት! አሸንፈዋል!** 🏆\n\n` +
+                    `🎯 የመረጧቸው: [ ${session.selectedNumbers.sort((a,b)=>a-b).join(', ')} ]\n` +
+                    `球 አጠቃላይ የወጡት: [ ${drawnNumbers.sort((a,b)=>a-b).join(', ')} ]\n` +
+                    `✨ ትክክለኛ ግጥሚያዎች: **${matchCount}** ቁጥር\n` +
+                    `💰 ያሸነፉት ሽልማት: **ETB ${winAmount.toFixed(2)}**\n\n` +
+                    `💼 ባላንስዎ: **ETB ${user.balance.toFixed(2)}**`;
+
+                keyboardOptions = [
+                    [Markup.button.callback('🎮 እንደገና ጫወት (Play Again)', 'select_keno')],
+                    [Markup.button.callback('🔙 ወደ ዋናው ሜኑ', 'back_to_main_menu')]
+                ];
+            } else {
+                if (userId !== ADMIN_ID) {
+                    user.losses += 1;
+                    await user.save();
+                }
+
+                resultMsg = `❌ **አሳዛኝ ሁኔታ! ተሸንፈዋል!**\n\n` +
+                    `🎯 የመረጧቸው: [ ${session.selectedNumbers.sort((a,b)=>a-b).join(', ')} ]\n` +
+                    `球 አጠቃላይ የወጡት: [ ${drawnNumbers.sort((a,b)=>a-b).join(', ')} ]\n` +
+                    `✨ ትክክለኛ ግጥሚያዎች: **${matchCount}** ቁጥር\n\n` +
+                    `💼 የቀረ ባላንስ: **ETB ${user.balance.toFixed(2)}**`;
+
+                keyboardOptions = [
+                    [Markup.button.callback('🔄 እንደአዲስ ጫወት (Try Again)', 'select_keno')],
+                    [Markup.button.callback('🔙 ወደ ዋናው ሜኑ', 'back_to_main_menu')]
+                ];
+            }
+
+            delete kenoSessions[userId];
+            await ctx.editMessageText(resultMsg, Markup.inlineKeyboard(keyboardOptions));
+        }
+    }, 3000); // በየ 3 ሰከንድ (3000 ms)
 });
 
 bot.action('back_to_main_menu', (ctx) => {
-    ctx.editMessageText(`🎲 **እፉዬ ጨዋታዎች ማዕከል**\n\nእባክዎ የሚፈልጉትን አማራጭ ይምረጡ፦`, Markup.inlineKeyboard([
+    ctx.editMessageText(`🎲 **እፉዬ ጨዋታዎች ማዕከል**\n\nእባክዎ የሚፈልጉትን ጨዋታ ይምረጡ፦`, Markup.inlineKeyboard([
         [Markup.button.callback('🎯 ቢንጎ ጨዋታ (Bingo)', 'select_bingo')],
         [Markup.button.callback('🎲 ኬኖ ጨዋታ (Keno)', 'select_keno')]
     ]));
@@ -400,7 +468,7 @@ bot.hears('💬 ኮሜንት (Comment)', (ctx) => {
 bot.hears('📖 መመሪያ (Instructions)', (ctx) => {
     ctx.reply(
         `📖 **የጨዋታዎች አጨዋወት መመሪያ**\n\n` +
-        `1. ዲፖዚት በመጫን ገንዘብ ገቢ በማድረግ የትራንዛክሽን ኮድ ወይም ስክሪንሾት ፎቶ ይላኩ።\n` +
+        `1. ዲፖዚት በመጫን ገንዘብ ገቢ በማድረግ ስክሪንሾት ፎቶ ይላኩ።\n` +
         `2. ፕለይ የሚለውን በመጫን **ቢንጎ** ወይም **ኬኖ** መምረጥ ይችላሉ።\n` +
         `3. በሁለቱም ጨዋታዎች ያሸነፉት ገንዘብ በቀጥታ ወደ ሚዛንዎ (Balance) ይገባል!`
     );
@@ -467,7 +535,6 @@ bot.hears('💵 አድሚን ዲፖዚት ማድረግ', (ctx) => {
     ctx.reply(`💵 ገንዘብ ገቢ ሊደረግለት የሚገባውን የተጫዋች **User ID** ያስገቡ:`);
 });
 
-// --- የተስተካከለው የአድሚን መጫወቻ አዝራሮች (10፣ 20፣ 50፣ 100 እና ኬኖ) ---
 bot.hears('🎮 አድሚን መጫወቻ (Admin Play)', (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     ctx.reply(
@@ -492,7 +559,7 @@ bot.action(/ban_user_(\d+)/, async (ctx) => {
     ctx.editMessageText(`✅ ዩዘር ID \`${targetUserId}\` ያለው ተጫዋች ከሲስተሙ ተወግዷል!`, { parse_mode: 'Markdown' });
 });
 
-// --- ቢንጎ ጨዋታ ማስጀመር (የ 10, 20, 50 እና 100 ብር ሃንድለሮች) ---
+// --- ቢንጎ ጨዋታ ማስጀመር (10, 20, 50 እና 100 ብር) ---
 bot.action(/play_(\d+)/, async (ctx) => {
     const userId = ctx.from.id;
     const cost = parseInt(ctx.match[1]);
@@ -780,7 +847,7 @@ bot.on('text', async (ctx) => {
             comment.adminReply = text;
             await comment.save();
 
-            await bot.telegram.sendMessage(comment.userId, `📥 **ከአድሚን የተሰطه ምላሽ:**\n\n${text}`).catch(()=>{});
+            await bot.telegram.sendMessage(comment.userId, `📥 **ከአድሚን የተሰጠ ምላሽ:**\n\n${text}`).catch(()=>{});
             return ctx.reply(`✅ የምላሽ መልእክት ለተጠቃሚው ተልኳል!`);
         }
     }
