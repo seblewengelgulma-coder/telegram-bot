@@ -49,14 +49,13 @@ const requestSchema = new mongoose.Schema({
 });
 const RequestModel = mongoose.model('Request', requestSchema);
 
-// ኮሜንት ውስጥ ፎቶ እንዲገባ photoId እና photoUniqueId ተጨምረዋል
 const commentSchema = new mongoose.Schema({
     userId: { type: Number, required: true },
     userName: { type: String },
     message: { type: String, required: true },
-    photoId: { type: String, default: null }, // የተጠቃሚው ፎቶ
+    photoId: { type: String, default: null },
     adminReply: { type: String, default: null },
-    adminPhotoId: { type: String, default: null }, // የአድሚን መልስ ፎቶ
+    adminPhotoId: { type: String, default: null },
     date: { type: Date, default: Date.now }
 });
 const CommentModel = mongoose.model('Comment', commentSchema);
@@ -78,6 +77,7 @@ const ADMIN_PAYMENT_INFO = `🏦 **የአድሚን የክፍያ አካውንቶ�
 let userSteps = {}; 
 let activeGames = {}; 
 let waitingRoom = {}; 
+let kenoSessions = {}; // የኬኖ ጨዋታ ክፍለ ጊዜዎችን ለመያዝ
 
 async function getOrCreateUser(userId, userName = 'ተጫዋች') {
     let user = await User.findOne({ userId });
@@ -88,169 +88,31 @@ async function getOrCreateUser(userId, userName = 'ተጫዋች') {
     return user;
 }
 
-// --- 🎨 የቢንጎ ዌብ አፕ (HTML & CSS Frontend) ማስተናገጃ ሩት ---
-app.get('/game', (req, res) => {
-  res.send(`
-    <!DOCTYPE html>
-    <html lang="am">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>እፉዬ ቢንጎ - Efuye Bingo</title>
-        <script src="https://telegram.org/js/telegram-web-app.js"></script>
-        <style>
-            :root {
-                --bg-color: #0f172a;
-                --card-bg: #1e293b;
-                --accent-gold: #fbbf24;
-                --accent-green: #22c55e;
-                --text-color: #f8fafc;
-            }
-            body {
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                background-color: var(--bg-color);
-                color: var(--text-color);
-                margin: 0;
-                padding: 10px;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: flex-start;
-                min-height: 100vh;
-            }
-            h1 {
-                color: var(--accent-gold);
-                margin-top: 10px;
-                margin-bottom: 5px;
-                text-shadow: 0 0 10px rgba(251, 191, 36, 0.4);
-            }
-            .subtitle {
-                color: #94a3b8;
-                margin-bottom: 20px;
-                font-size: 14px;
-            }
-            .bingo-container {
-                background: var(--card-bg);
-                padding: 20px;
-                border-radius: 16px;
-                box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-                border: 2px solid rgba(251, 191, 36, 0.2);
-            }
-            .bingo-grid {
-                display: grid;
-                grid-template-columns: repeat(5, 1fr);
-                gap: 8px;
-                max-width: 350px;
-            }
-            .cell {
-                background-color: #334155;
-                aspect-ratio: 1;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-weight: bold;
-                font-size: 18px;
-                border-radius: 8px;
-                cursor: pointer;
-                transition: all 0.3s ease;
-                border: 1px solid rgba(255,255,255,0.05);
-            }
-            .cell:hover {
-                background-color: #475569;
-                transform: scale(1.05);
-            }
-            .cell.header {
-                background-color: var(--accent-gold);
-                color: #000;
-                cursor: default;
-                box-shadow: 0 0 8px var(--accent-gold);
-            }
-            .cell.marked {
-                background-color: var(--accent-green);
-                color: #fff;
-                box-shadow: 0 0 10px var(--accent-green);
-            }
-            .btn-bingo {
-                margin-top: 20px;
-                width: 100%;
-                background: linear-gradient(135deg, #fbbf24, #d97706);
-                color: #000;
-                border: none;
-                padding: 12px;
-                font-size: 16px;
-                font-weight: bold;
-                border-radius: 8px;
-                cursor: pointer;
-                box-shadow: 0 4px 15px rgba(251, 191, 36, 0.3);
-            }
-        </style>
-    </head>
-    <body>
-        <h1>🎲 እፉዬ ቢንጎ</h1>
-        <div class="subtitle">የቀለም ጨዋታ እና መዝናኛ ዌብ አፕ</div>
-        <div class="bingo-container">
-            <div class="bingo-grid" id="bingoGrid">
-                <div class="cell header">B</div>
-                <div class="cell header">I</div>
-                <div class="cell header">N</div>
-                <div class="cell header">G</div>
-                <div class="cell header">O</div>
-                
-                <div class="cell" onclick="toggleCell(this)">5</div>
-                <div class="cell" onclick="toggleCell(this)">18</div>
-                <div class="cell" onclick="toggleCell(this)">33</div>
-                <div class="cell" onclick="toggleCell(this)">50</div>
-                <div class="cell" onclick="toggleCell(this)">65</div>
-                
-                <div class="cell" onclick="toggleCell(this)">12</div>
-                <div class="cell" onclick="toggleCell(this)">22</div>
-                <div class="cell" onclick="toggleCell(this)">41</div>
-                <div class="cell" onclick="toggleCell(this)">52</div>
-                <div class="cell" onclick="toggleCell(this)">70</div>
-
-                <div class="cell" onclick="toggleCell(this)">8</div>
-                <div class="cell" onclick="toggleCell(this)">29</div>
-                <div class="cell header marked">⭐</div>
-                <div class="cell" onclick="toggleCell(this)">58</div>
-                <div class="cell" onclick="toggleCell(this)">72</div>
-
-                <div class="cell" onclick="toggleCell(this)">3</div>
-                <div class="cell" onclick="toggleCell(this)">20</div>
-                <div class="cell" onclick="toggleCell(this)">39</div>
-                <div class="cell" onclick="toggleCell(this)">55</div>
-                <div class="cell" onclick="toggleCell(this)">68</div>
-
-                <div class="cell" onclick="toggleCell(this)">14</div>
-                <div class="cell" onclick="toggleCell(this)">25</div>
-                <div class="cell" onclick="toggleCell(this)">44</div>
-                <div class="cell" onclick="toggleCell(this)">60</div>
-                <div class="cell" onclick="toggleCell(this)">74</div>
-            </div>
-            <button class="btn-bingo" onclick="alert('ቢንጎ ተረጋገጠ! 🏆')">🎯 BINGO (ቢንጎ አረጋግጥ)</button>
-        </div>
-        <script>
-            if (window.Telegram && window.Telegram.WebApp) {
-                window.Telegram.WebApp.ready();
-                window.Telegram.WebApp.expand();
-            }
-            function toggleCell(element) {
-                if(!element.classList.contains('header')) {
-                    element.classList.toggle('marked');
-                }
-            }
-        </script>
-    </body>
-    </html>
-  `);
-});
-
 app.get('/', (req, res) => {
-  res.send('Efuya Bingo Ultimate Bot with Enhanced Comments is running!');
+  res.send('Efuye Bingo & Keno Ultimate Bot Server is running!');
 });
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
+
+// --- 🎯 የኬኖ ጨዋታ ሎጅክ ማስተካከያ ---
+function getKenoKeyboard(selectedNumbers = []) {
+    let keyboard = [];
+    let row = [];
+    for (let i = 1; i <= 80; i++) {
+        let isSelected = selectedNumbers.includes(i);
+        let btnText = isSelected ? `✅ ${i}` : `${i}`;
+        row.push(Markup.button.callback(btnText, `keno_num_${i}`));
+        if (row.length === 8) {
+            keyboard.push(row);
+            row = [];
+        }
+    }
+    keyboard.push([Markup.button.callback('🎲 ኬኖ ጨዋታ ጀምር (Draw)', 'start_keno_draw')]);
+    keyboard.push([Markup.button.callback('🔙 ወደ ዋናው ሜኑ', 'back_to_main_menu')]);
+    return Markup.inlineKeyboard(keyboard);
+}
 
 // --- የቢንጎ ማትሪክስ ጄነሬተር ---
 function generateBingoCard() {
@@ -323,7 +185,7 @@ function checkWinCondition(matrix) {
 }
 
 const mainKeyboard = Markup.keyboard([
-    ['🎮 ፕለይ (Play)', '🌐 ከለርፉል ቢንጎ ዌብ (Web App)'],
+    ['🎮 ፕለይ (Play)'],
     ['💰 ዲፖዚት (Deposit)', '💳 ዊዝድሮ (Withdraw)'],
     ['👤 ፕሮፋይል (Profile)', '💬 ኮሜንት (Comment)'],
     ['📖 መመሪያ (Instructions)']
@@ -342,17 +204,17 @@ bot.start(async (ctx) => {
     let user = await getOrCreateUser(userId, userName);
 
     if (userId === ADMIN_ID) {
-        return ctx.reply(`👑 **ሰላም አድሚን ${userName}!**\nወደ እፉዬ ቢንጎ አስተዳዳሪ ፓነል በደህና መጡ።`, adminKeyboard);
+        return ctx.reply(`👑 **ሰላም አድሚን ${userName}!**\nወደ አስተዳዳሪ ፓነል በደህና መጡ።`, adminKeyboard);
     }
 
     if (!user.phone) {
         return ctx.reply(
-            `🎲 **እፉዬ ቢንጎ (Efuye Bingo)** - እንኳን ደህና መጡ ${userName}!\n\nቦቱን ለመጠቀም እባክዎ ከታች ያለውን አዝራር በመጫን **ስልክ ቁጥርዎን** ያጋሩ (Share Contact):`,
+            `🎲 **እፉዬ ጨዋታዎች ማዕከል** - እንኳን ደህና መጡ ${userName}!\n\nቦቱን ለመጠቀም እባክዎ ከታች ያለውን አዝራር በመጫን **ስልክ ቁጥርዎን** ያጋሩ (Share Contact):`,
             Markup.keyboard([[Markup.button.contactRequest('📱 ስልክ ቁጥር አጋራ (Share Contact)')]]).resize()
         );
     }
 
-    await ctx.reply(`🎲 **እፉዬ ቢንጎ (Efuye Bingo)** - እንኳን ደህና መጡ እንደገና ${userName}!\n\nእባክዎ የሚፈልጉትን አማራጭ ከታች ካለው ሜኑ ይምረጡ።`, mainKeyboard);
+    await ctx.reply(`🎲 **እፉዬ ጨዋታዎች ማዕከል** - እንኳን ደህና መጡ እንደገና ${userName}!\n\nእባክዎ የሚፈልጉትን አማራጭ ከታች ካለው ሜኑ ይምረጡ።`, mainKeyboard);
 });
 
 bot.on('contact', async (ctx) => {
@@ -364,26 +226,126 @@ bot.on('contact', async (ctx) => {
     ctx.reply(`✅ ስልክ ቁጥርዎ በተሳካ ሁኔታ ተመዝግቧል!`, mainKeyboard);
 });
 
-bot.hears('🌐 ከለርፉል ቢንጎ ዌብ (Web App)', (ctx) => {
-    let serverUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
-    if (serverUrl.startsWith('http://') && !serverUrl.includes('localhost')) {
-        serverUrl = serverUrl.replace('http://', 'https://');
-    }
+// --- 🎮 ፕለይ ሲጫን ጨዋታዎችን መምረጫ (ቢንጎ ወይስ ኬኖ) ---
+bot.hears('🎮 ፕለይ (Play)', (ctx) => {
     ctx.reply(
-        `🎨 **የእፉዬ ቢንጎ ከለርፉል ዌብ አፕ**\n\nከታች ያለውን ቁልፍ በመጫን በከለማት የተዋበውን እና በ CSS የተሰራውን ውብ የቢንጎ ሰሌዳ ይክፈቱ!`,
-        Markup.inlineKeyboard([[Markup.button.webApp('🚀 ከለርፉል ቢንጎ ክፈት (Open Web App)', `${serverUrl}/game`)]])
+        `🎮 **እባክዎ መጫወት የሚፈልጉትን ጨዋታ ይምረጡ፦**`,
+        Markup.inlineKeyboard([
+            [Markup.button.callback('🎯 ቢንጎ ጨዋታ (Bingo)', 'select_bingo')],
+            [Markup.button.callback('🎲 ኬኖ ጨዋታ (Keno)', 'select_keno')]
+        ])
     );
 });
 
-bot.hears('🎮 ፕለይ (Play)', (ctx) => {
-    if (ctx.from.id === ADMIN_ID) return ctx.reply('⚠️ አድሚን ነዎት! ከታች ካለው አድሚን መጫወቻ ይጠቀሙ።', adminKeyboard);
-    ctx.reply(
-        `🎮 **የመጫወቻ የገንዘብ መጠን ይምረጡ (በግሩፕ የተከፈለ):**`,
+bot.action('select_bingo', (ctx) => {
+    ctx.editMessageText(
+        `🎯 **የቢንጎ መጫወቻ የገንዘብ መጠን ይምረጡ:**`,
         Markup.inlineKeyboard([
             [Markup.button.callback('Play 10 ETB', 'play_10'), Markup.button.callback('Play 20 ETB', 'play_20')],
             [Markup.button.callback('Play 50 ETB', 'play_50'), Markup.button.callback('Play 100 ETB', 'play_100')]
         ])
     );
+});
+
+bot.action('select_keno', async (ctx) => {
+    const userId = ctx.from.id;
+    let user = await getOrCreateUser(userId);
+    kenoSessions[userId] = { selectedNumbers: [], betAmount: 10 };
+
+    ctx.editMessageText(
+        `🎲 **ኬኖ ጨዋታ**\n\nከ 1 እስከ 80 ካሉት ቁጥሮች **ከ 1 እስከ 10 ቁጥሮች** ይምረጡ (አሁን የተመረጡ: 0):\n\nአካውንት ባላንስ: **ETB ${user.balance.toFixed(2)}**`,
+        getKenoKeyboard([])
+    );
+});
+
+// --- ኬኖ ቁጥር ምርጫ ሎጂክ ---
+bot.action(/keno_num_(\d+)/, async (ctx) => {
+    const userId = ctx.from.id;
+    const num = parseInt(ctx.match[1]);
+    if (!kenoSessions[userId]) kenoSessions[userId] = { selectedNumbers: [], betAmount: 10 };
+
+    let session = kenoSessions[userId];
+    let index = session.selectedNumbers.indexOf(num);
+
+    if (index > -1) {
+        session.selectedNumbers.splice(index, 1);
+    } else {
+        if (session.selectedNumbers.length >= 10) {
+            return ctx.answerCbQuery('⚠️ ቢበዛ 10 ቁጥሮች ብቻ መምረጥ ይችላሉ!', { show_alert: true });
+        }
+        session.selectedNumbers.push(num);
+    }
+
+    let user = await getOrCreateUser(userId);
+    ctx.editMessageText(
+        `🎲 **ኬኖ ጨዋታ**\n\nየመረጧቸው ቁጥሮች: [ **${session.selectedNumbers.sort((a,b)=>a-b).join(', ')}** ] (${session.selectedNumbers.length}/10)\n\nአካውንት ባላንስ: **ETB ${user.balance.toFixed(2)}**`,
+        getKenoKeyboard(session.selectedNumbers)
+    ).catch(()=>{});
+});
+
+// --- ኬኖ ድሮ (Draw) ማከናወኛ ---
+bot.action('start_keno_draw', async (ctx) => {
+    const userId = ctx.from.id;
+    let session = kenoSessions[userId];
+    if (!session || session.selectedNumbers.length === 0) {
+        return ctx.answerCbQuery('❌ ቢያንስ አንድ ቁጥር መምረጥ አለብዎት!', { show_alert: true });
+    }
+
+    let user = await getOrCreateUser(userId);
+    let betAmount = 10; // ቋሚ የካርታ ዋጋ (ወይም በምትፈልጉት መቀየር ይቻላል)
+
+    if (user.balance < betAmount) {
+        return ctx.answerCbQuery('❌ በቂ ባላንስ የለዎትም! እባክዎ ዲፖዚት ያድርጉ።', { show_alert: true });
+    }
+
+    user.balance -= betAmount;
+    user.totalGames += 1;
+
+    // 20 ቁጥሮች ከ 80 ማውጣት
+    let drawnNumbers = [];
+    let allNums = Array.from({length: 80}, (_, i) => i + 1);
+    while(drawnNumbers.length < 20) {
+        let rIdx = Math.floor(Math.random() * allNums.length);
+        drawnNumbers.push(allNums.splice(rIdx, 1)[0]);
+    }
+
+    let matches = session.selectedNumbers.filter(n => drawnNumbers.includes(n));
+    let matchCount = matches.length;
+    let winAmount = 0;
+
+    // የሽልማት ሰንጠረዥ (ለማሳያ ያህል)
+    if (matchCount >= 5) {
+        winAmount = betAmount * matchCount * 2;
+    }
+
+    if (winAmount > 0) {
+        user.balance += winAmount;
+        user.wins += 1;
+        user.level += 1;
+    } else {
+        user.losses += 1;
+    }
+    await user.save();
+
+    let resultMsg = `🎲 **የኬኖ ጨዋታ ውጤት**\n\n` +
+        `🎯 የመረጧቸው: [ ${session.selectedNumbers.sort((a,b)=>a-b).join(', ')} ]\n` +
+        `球 የወጡት 20 ቁጥሮች: [ ${drawnNumbers.sort((a,b)=>a-b).join(', ')} ]\n` +
+        `✨ ትክክለኛ ግጥሚያዎች: **${matchCount}** ቁጥር\n` +
+        `💰 ያሸነፉት ገንዘብ: **ETB ${winAmount.toFixed(2)}**\n\n` +
+        `💼 የቀረ ባላንስ: **ETB ${user.balance.toFixed(2)}**`;
+
+    delete kenoSessions[userId];
+    ctx.editMessageText(resultMsg, Markup.inlineKeyboard([
+        [Markup.button.callback('🎮 እንደገና ኬኖ አጫወት', 'select_keno')],
+        [Markup.button.callback('🔙 ወደ ዋናው ሜኑ', 'back_to_main_menu')]
+    ]));
+});
+
+bot.action('back_to_main_menu', (ctx) => {
+    ctx.editMessageText(`🎲 **እፉዬ ጨዋታዎች ማዕከል**\n\nእባክዎ የሚፈልጉትን አማራጭ ይምረጡ፦`, Markup.inlineKeyboard([
+        [Markup.button.callback('🎯 ቢንጎ ጨዋታ (Bingo)', 'select_bingo')],
+        [Markup.button.callback('🎲 ኬኖ ጨዋታ (Keno)', 'select_keno')]
+    ]));
 });
 
 bot.hears('💰 ዲፖዚት (Deposit)', async (ctx) => {
@@ -431,20 +393,20 @@ bot.hears('👤 ፕሮፋይል (Profile)', async (ctx) => {
 
 bot.hears('💬 ኮሜንት (Comment)', (ctx) => {
     const userId = ctx.from.id;
-    // ተጠቃሚው ጽሑፍ ወይም ፎቶ (ስክሪንሾት) መላክ እንዲችል comment_waiting ተብሎ ተዘጋጅቷል
     userSteps[userId] = { action: 'comment_waiting' };
     ctx.reply(`💬 ለአድሚን ማስተላለፍ የሚፈልጉትን **አስተያየት፣ ጥያቄ ወይም ስክሪንሾት ፎቶ** በአንድ ላይ ወይም በተናጠል ይላኩ፦`);
 });
 
 bot.hears('📖 መመሪያ (Instructions)', (ctx) => {
     ctx.reply(
-        `📖 **የእፉዬ ቢንጎ ጨዋታ አጨዋወት መመሪያዎች**\n\n` +
+        `📖 **የጨዋታዎች አጨዋወት መመሪያ**\n\n` +
         `1. ዲፖዚት በመጫን ገንዘብ ገቢ በማድረግ የትራንዛክሽን ኮድ ወይም ስክሪንሾት ፎቶ ይላኩ።\n` +
-        `2. ፕለይ የሚለውን በመጫን የገንዘብ መጠን ይምረጡ።\n` +
-        `3. ቁጥሮች ሲጠሩ ቴብሉ ላይ እየተጫኑ ይሙሉ; አንደኛ ቢንጎ ያለ ሰው ሲወጣ ጨዋታው ይጠናቀቃል!`
+        `2. ፕለይ የሚለውን በመጫን **ቢንጎ** ወይም **ኬኖ** መምረጥ ይችላሉ።\n` +
+        `3. በሁለቱም ጨዋታዎች ያሸነፉት ገንዘብ በቀጥታ ወደ ሚዛንዎ (Balance) ይገባል!`
     );
 });
 
+// --- አድሚን ሜኑዎች ---
 bot.hears('📊 የአድሚን ባላንስ ማየት', async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     let users = await User.find();
@@ -481,7 +443,6 @@ bot.hears('📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', async (ctx) => {
     }
 });
 
-// --- የተጫዋቾች ኮሜንቶች ዝርዝር (ከፎቶ ጋር እንዲታዩ) ---
 bot.hears('💬 የተጫዋቾች ኮሜንቶች', async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     let comments = await CommentModel.find().sort({ date: -1 }).limit(15);
@@ -529,6 +490,7 @@ bot.action(/ban_user_(\d+)/, async (ctx) => {
     ctx.editMessageText(`✅ ዩዘር ID \`${targetUserId}\` ያለው ተጫዋች ከሲስተሙ ተወግዷል!`, { parse_mode: 'Markdown' });
 });
 
+// --- ቢንጎ ጨዋታ ማስጀመር (በጥንቱ አሰራር) ---
 bot.action(/play_(\d+)/, async (ctx) => {
     const userId = ctx.from.id;
     const cost = parseInt(ctx.match[1]);
@@ -711,7 +673,6 @@ bot.action(/reject_req_(.+)/, async (ctx) => {
     ctx.editMessageText(`❌ ጥያቄው ውድቅ ተደርጓል!`);
 });
 
-// --- አድሚን ለኮሜንት ምላሽ ለመስጠት በተኑን ሲጫን ---
 bot.action(/reply_comment_(.+)/, async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     let commentId = ctx.match[1];
@@ -720,7 +681,6 @@ bot.action(/reply_comment_(.+)/, async (ctx) => {
     ctx.reply(`✍️ ለዚህ ኮሜንት የሚሰጡትን ምላሽ (ጽሑፍ እና/ወይም ፎቶ) አብረው ይላኩ፦`);
 });
 
-// --- ፎቶ (ስክሪንሾት ወይም አድሚን መልስ ፎቶ) ሲላክ የሚከናወን ---
 bot.on('photo', async (ctx) => {
     const userId = ctx.from.id;
     const userName = ctx.from.first_name || 'ተጫዋች';
@@ -728,7 +688,6 @@ bot.on('photo', async (ctx) => {
     let photoId = photo.file_id;
     let photoUniqueId = photo.file_unique_id;
 
-    // 1. አድሚን ለኮሜንት በፎቶ (እና በጽሑፍ) ምላሽ ሲሰጥ
     if (userId === ADMIN_ID && userSteps[ADMIN_ID] && userSteps[ADMIN_ID].action === 'admin_reply_comment') {
         let commentId = userSteps[ADMIN_ID].commentId;
         let replyText = ctx.message.caption || 'ለጥያቄዎ የተሰጠ የምላሽ ፎቶ';
@@ -741,7 +700,6 @@ bot.on('photo', async (ctx) => {
         comment.adminPhotoId = photoId;
         await comment.save();
 
-        // ለተጠቃሚው ማሳወቂያ እና ፎቶ መላክ
         await bot.telegram.sendPhoto(comment.userId, photoId, {
             caption: `📥 **ከአድሚን የተሰጠ ምላሽ:**\n\n${replyText}`,
             parse_mode: 'Markdown'
@@ -750,29 +708,21 @@ bot.on('photo', async (ctx) => {
         return ctx.reply(`✅ የምላሽ ፎቶ እና መልእክት ለተጠቃሚው በተሳካ ሁኔታ ተልኳል!`);
     }
 
-    // 2. ተጠቃሚው ኮሜንት ስላክ ፎቶ (ስክሪንሾት) አብሮ ሲያያይዝ
     if (userSteps[userId] && userSteps[userId].action === 'comment_waiting') {
         let messageText = ctx.message.caption || 'ስክሪንሾት/ፎቶ ጥያቄ';
         delete userSteps[userId];
 
-        let newComment = new CommentModel({
-            userId,
-            userName,
-            message: messageText,
-            photoId: photoId
-        });
+        let newComment = new CommentModel({ userId, userName, message: messageText, photoId });
         await newComment.save();
 
         ctx.reply(`✅ ፎቶዎ እና መልእክትዎ ለአድሚን ተልኳል! እናመሰግናለን።`, mainKeyboard);
 
-        // ለአድሚን በፎቶ ማሳወቂያ መላክ
         let adminMsg = `📌 **አዲስ የኮሜንት/ጥያቄ ፎቶ መጣ!**\n\n👤 **ከ:** ${userName} (ID: \`${userId}\`)\n💬 **መልእክት:** "${messageText}"`;
         let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ (በጽሑፍ/ፎቶ)', `reply_comment_${newComment._id}`)]]);
         
         return bot.telegram.sendPhoto(ADMIN_ID, photoId, { caption: adminMsg, parse_mode: 'Markdown', ...replyBtn }).catch(()=>{});
     }
 
-    // 3. የዲፖዚት ስክሪንሾት ሂደት
     if (userSteps[userId] && userSteps[userId].action === 'deposit_screenshot') {
         let amount = userSteps[userId].amount;
         let uploadDate = new Date();
@@ -780,29 +730,20 @@ bot.on('photo', async (ctx) => {
         let existingRequest = await RequestModel.findOne({ photoUniqueId });
         if (existingRequest) {
             delete userSteps[userId];
-            return ctx.reply(`❌ **ስህተት!** ይህ የክፍያ ስክሪንሾት ከዚህ በፊት ጥቅም ላይ ውሏል/ተልኳል። እባክዎ ትክክለኛ እና አዲስ ስክሪንሾት ይላኩ።`);
+            return ctx.reply(`❌ **ስህተት!** ይህ የክፍያ ስክሪንሾት ከዚህ በፊት ጥቅም ላይ ውሏል/ተልኳል።`);
         }
 
         delete userSteps[userId];
         let newReq = new RequestModel({
-            userId,
-            userName,
-            type: 'deposit',
-            amount,
+            userId, userName, type: 'deposit', amount,
             details: 'Telegram Screenshot Deposit',
-            photoUniqueId,
-            photoId,
-            date: uploadDate
+            photoUniqueId, photoId, date: uploadDate
         });
         await newReq.save();
 
-        ctx.reply(`⏳ **የዲፖዚት ጥያቄዎ ደርሷል!**\nአድሚን አረጋግጦ እስኪልክልዎ ድረስ በትዕግስት ይጠብቁ።`);
+        ctx.reply(`⏳ **የዲፖዚት ጥያቄዎ ደርሷል!** አድሚን አረጋግጦ እስኪልክልዎ ድረስ ይጠብቁ።`);
 
-        let adminMsg = `📥 **አዲስ የዲፖዚት ጥያቄ መጣ!**\n\n` +
-            `👤 **ስም:** ${userName} (ID: \`${userId}\`)\n` +
-            `💰 **መጠን:** ETB ${amount}\n` +
-            `📅 **የተላከበት ቀን:** ${uploadDate.toLocaleString()}`;
-        
+        let adminMsg = `📥 **አዲስ የዲፖዚት ጥያቄ መጣ!**\n\n👤 **ስም:** ${userName} (ID: \`${userId}\`)\n💰 **መጠን:** ETB ${amount}`;
         let adminKeyboard = Markup.inlineKeyboard([
             [Markup.button.callback('✅ አጽድቅ', `approve_req_${newReq._id}`), Markup.button.callback('❌ ውድቅ አድርግ', `reject_req_${newReq._id}`)]
         ]);
@@ -811,7 +752,6 @@ bot.on('photo', async (ctx) => {
     }
 });
 
-// --- የጽሑፍ ግብዓቶች (Text Input Handler) ---
 bot.on('text', async (ctx) => {
     const userId = ctx.from.id;
     const text = ctx.message.text.trim();
@@ -820,7 +760,7 @@ bot.on('text', async (ctx) => {
         let step = userSteps[ADMIN_ID];
         if (step.action === 'admin_deposit_id') {
             userSteps[ADMIN_ID] = { action: 'admin_deposit_amount', targetId: parseInt(text) };
-            return ctx.reply(`💵 የ ተጫዋች ID ተይዟል። ሊያስገቡለት የሚፈልጉትን የብር መጠን ያስገቡ:`);
+            return ctx.reply(`💵 የተጫዋች ID ተይዟል። ሊያስገቡለት የሚፈልጉትን የብር መጠን ያስገቡ:`);
         } else if (step.action === 'admin_deposit_amount') {
             let targetUser = await getOrCreateUser(step.targetId);
             targetUser.balance += parseFloat(text);
@@ -828,9 +768,7 @@ bot.on('text', async (ctx) => {
             delete userSteps[ADMIN_ID];
             ctx.reply(`✅ ዲፖዚቱ ተሳክቷል!`);
             return bot.telegram.sendMessage(step.targetId, `🎉 አድሚን አካውንትዎን ሞልቶታል። 💰`).catch(()=>{});
-        } 
-        // አድሚን ለኮሜንት በጽሑፍ ብቻ ምላሽ ሲሰጥ
-        else if (step.action === 'admin_reply_comment') {
+        } else if (step.action === 'admin_reply_comment') {
             let commentId = step.commentId;
             delete userSteps[ADMIN_ID];
 
@@ -840,7 +778,7 @@ bot.on('text', async (ctx) => {
             comment.adminReply = text;
             await comment.save();
 
-            await bot.telegram.sendMessage(comment.userId, `📥 **ከአድሚን የተሰጠ ምላሽ:**\n\n${text}`).catch(()=>{});
+            await bot.telegram.sendMessage(comment.userId, `📥 **ከአድሚን የተሰطه ምላሽ:**\n\n${text}`).catch(()=>{});
             return ctx.reply(`✅ የምላሽ መልእክት ለተጠቃሚው ተልኳል!`);
         }
     }
@@ -865,11 +803,10 @@ bot.on('text', async (ctx) => {
             await user.save();
             let newReq = new RequestModel({ userId, userName: user.userName, type: 'withdraw', amount, details: user.phone });
             await newReq.save();
-            ctx.reply(`⏳ የዊዝድሮ ጥያቄዎ ለአድሚን ተልኳል! አድሚን ሲያረጋግጥ ይለቀቅልዎታል።`);
+            ctx.reply(`⏳ የዊዝድሮ ጥያቄዎ ለአድሚን ተልኳል!`);
             return;
         }
 
-        // ተጠቃሚው በጽሑፍ ብቻ ኮሜንት ሲልክ
         if (stepInfo.action === 'comment_waiting') {
             delete userSteps[userId];
             let newComment = new CommentModel({ userId, userName: ctx.from.first_name, message: text });
@@ -885,4 +822,4 @@ bot.on('text', async (ctx) => {
 });
 
 bot.launch();
-console.log('🤖 Efuye Bingo Ultimate Bot with Photo Comments & Admin Replies is running successfully!');
+console.log('🤖 Efuye Bingo & Keno Ultimate Bot is running successfully!');
