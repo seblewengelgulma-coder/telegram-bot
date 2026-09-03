@@ -1,4 +1,4 @@
-require('dotenv').config(); // የ .env ፋይል እንዲነበብ የሚያደርግ
+require('dotenv').config();
 const express = require('express');
 const { Telegraf, Markup } = require('telegraf');
 const mongoose = require('mongoose');
@@ -43,17 +43,20 @@ const requestSchema = new mongoose.Schema({
     type: { type: String, required: true },
     amount: { type: Number, required: true },
     details: { type: String, required: true },
+    photoUniqueId: { type: String, unique: true, sparse: true }, 
     photoId: { type: String, sparse: true }, 
-    transactionId: { type: String, sparse: true }, 
     date: { type: Date, default: Date.now }
 });
 const RequestModel = mongoose.model('Request', requestSchema);
 
+// ኮሜንት ውስጥ ፎቶ እንዲገባ photoId እና photoUniqueId ተጨምረዋል
 const commentSchema = new mongoose.Schema({
     userId: { type: Number, required: true },
     userName: { type: String },
     message: { type: String, required: true },
+    photoId: { type: String, default: null }, // የተጠቃሚው ፎቶ
     adminReply: { type: String, default: null },
+    adminPhotoId: { type: String, default: null }, // የአድሚን መልስ ፎቶ
     date: { type: Date, default: Date.now }
 });
 const CommentModel = mongoose.model('Comment', commentSchema);
@@ -70,8 +73,7 @@ const ADMIN_ID = 380035906; // የአድሚን ID
 
 const ADMIN_PAYMENT_INFO = `🏦 **የአድሚን የክፍያ አካውንቶች (ለዲፖዚት)**\n\n` +
     `1. **ንግድ ባንክ (CBE):** 10005741880 (ቴዎድሮስ / እፉዬ)\n` +
-    `2. **ቴሌብር (Telebirr):** 0929441620 (ቴዎድሮስ)\n\n` +
-    `⚠️ **ማሳሰቢያ:** ገንዘቡን ከላኩ በኋላ የትራንዛክሽን ቁጥር (Transaction ID) ወይም የትራንዛክሽን ስክሪንሾት (Screenshot) ፎቶ በዚህ ቦት ላይ ይላኩ!`;
+    `2. **ቴሌብር (Telebirr):** 0929441620 (ቴዎድሮስ)\n\n`;
 
 let userSteps = {}; 
 let activeGames = {}; 
@@ -95,6 +97,7 @@ app.get('/game', (req, res) => {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>እፉዬ ቢንጎ - Efuye Bingo</title>
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
         <style>
             :root {
                 --bg-color: #0f172a;
@@ -108,14 +111,16 @@ app.get('/game', (req, res) => {
                 background-color: var(--bg-color);
                 color: var(--text-color);
                 margin: 0;
-                padding: 20px;
+                padding: 10px;
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                justify-content: center;
+                justify-content: flex-start;
+                min-height: 100vh;
             }
             h1 {
                 color: var(--accent-gold);
+                margin-top: 10px;
                 margin-bottom: 5px;
                 text-shadow: 0 0 10px rgba(251, 191, 36, 0.4);
             }
@@ -224,6 +229,10 @@ app.get('/game', (req, res) => {
             <button class="btn-bingo" onclick="alert('ቢንጎ ተረጋገጠ! 🏆')">🎯 BINGO (ቢንጎ አረጋግጥ)</button>
         </div>
         <script>
+            if (window.Telegram && window.Telegram.WebApp) {
+                window.Telegram.WebApp.ready();
+                window.Telegram.WebApp.expand();
+            }
             function toggleCell(element) {
                 if(!element.classList.contains('header')) {
                     element.classList.toggle('marked');
@@ -236,7 +245,7 @@ app.get('/game', (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.send('Efuya Bingo Ultimate Bot with Web App is running!');
+  res.send('Efuya Bingo Ultimate Bot with Enhanced Comments is running!');
 });
 
 app.listen(PORT, () => {
@@ -356,7 +365,10 @@ bot.on('contact', async (ctx) => {
 });
 
 bot.hears('🌐 ከለርፉል ቢንጎ ዌብ (Web App)', (ctx) => {
-    const serverUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+    let serverUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+    if (serverUrl.startsWith('http://') && !serverUrl.includes('localhost')) {
+        serverUrl = serverUrl.replace('http://', 'https://');
+    }
     ctx.reply(
         `🎨 **የእፉዬ ቢንጎ ከለርፉል ዌብ አፕ**\n\nከታች ያለውን ቁልፍ በመጫን በከለማት የተዋበውን እና በ CSS የተሰራውን ውብ የቢንጎ ሰሌዳ ይክፈቱ!`,
         Markup.inlineKeyboard([[Markup.button.webApp('🚀 ከለርፉል ቢንጎ ክፈት (Open Web App)', `${serverUrl}/game`)]])
@@ -374,10 +386,19 @@ bot.hears('🎮 ፕለይ (Play)', (ctx) => {
     );
 });
 
-bot.hears('💰 ዲፖዚት (Deposit)', (ctx) => {
+bot.hears('💰 ዲፖዚት (Deposit)', async (ctx) => {
     const userId = ctx.from.id;
+    let user = await getOrCreateUser(userId);
+    
+    if (!user.phone) {
+        return ctx.reply(
+            `⚠️ ዲፖዚት ከማድረግዎ በፊት ስልክ ቁጥርዎ ማጋራት አለብዎት።`,
+            Markup.keyboard([[Markup.button.contactRequest('📱 ስልክ ቁጥር አጋራ (Share Contact)')]]).resize()
+        );
+    }
+
     userSteps[userId] = { action: 'deposit_amount' };
-    ctx.reply(`${ADMIN_PAYMENT_INFO}\n\n💰 እባክዎ **ያስተላለፉትን የብር መጠን** ቁጥር ብቻ ይጻፉ (ለምሳሌ: 100):`);
+    ctx.reply(`${ADMIN_PAYMENT_INFO}\n💰 እባክዎ **ሊያስገቡት (ዲፖዚት ላደረጉት) የሚፈልጉትን የብር መጠን** ቁጥር ብቻ ይጻፉ (ለምሳሌ: 100):`);
 });
 
 bot.hears('💳 ዊዝድሮ (Withdraw)', async (ctx) => {
@@ -410,8 +431,9 @@ bot.hears('👤 ፕሮፋይል (Profile)', async (ctx) => {
 
 bot.hears('💬 ኮሜንት (Comment)', (ctx) => {
     const userId = ctx.from.id;
-    userSteps[userId] = { action: 'send_comment' };
-    ctx.reply(`💬 ለአድሚን ማስተላለፍ የሚፈልጉትን አስተያየት ወይም ጥያቄ ይጻፉ፦`);
+    // ተጠቃሚው ጽሑፍ ወይም ፎቶ (ስክሪንሾት) መላክ እንዲችል comment_waiting ተብሎ ተዘጋጅቷል
+    userSteps[userId] = { action: 'comment_waiting' };
+    ctx.reply(`💬 ለአድሚን ማስተላለፍ የሚፈልጉትን **አስተያየት፣ ጥያቄ ወይም ስክሪንሾት ፎቶ** በአንድ ላይ ወይም በተናጠል ይላኩ፦`);
 });
 
 bot.hears('📖 መመሪያ (Instructions)', (ctx) => {
@@ -447,7 +469,7 @@ bot.hears('📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', async (ctx) => {
     let reqs = await RequestModel.find();
     if (reqs.length === 0) return ctx.reply('📭 ምንም የሚጠብቅ ጥያቄ የለም።', adminKeyboard);
     for (let r of reqs) {
-        let msg = `📌 **አይነት:** ${r.type.toUpperCase()}\n👤 **ስም:** ${r.userName} (ID: \`${r.userId}\`)\n💰 **መጠን:** ETB ${r.amount}\n📱 **አካውንት/ስልክ:** \`${r.details}\``;
+        let msg = `📌 **አይነት:** ${r.type.toUpperCase()}\n👤 **ስም:** ${r.userName} (ID: \`${r.userId}\`)\n💰 **መጠን:** ETB ${r.amount}\n📱 **አካውንት/ስልክ:** \`${r.details}\`\n📅 **ቀን:** ${new Date(r.date).toLocaleString()}`;
         let keyboard = Markup.inlineKeyboard([
             [Markup.button.callback('✅ አጽድቅ', `approve_req_${r._id}`), Markup.button.callback('❌ ውድቅ አድርግ', `reject_req_${r._id}`)]
         ]);
@@ -459,76 +481,22 @@ bot.hears('📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', async (ctx) => {
     }
 });
 
-// --- 🛠 የዲፖዚት እና ዊዝድሮ ጥያቄዎችን መቀበል/ማስተካከል (Approve / Reject Handlers) ---
-bot.action(/approve_req_(.+)/, async (ctx) => {
-    if (ctx.from.id !== ADMIN_ID) return;
-    let reqId = ctx.match[1];
-    let request = await RequestModel.findById(reqId);
-    
-    if (!request) {
-        return ctx.answerCbQuery('❌ ይህ ጥያቄ უკვე ተሰርዟል ወይም የለም!', { show_alert: true });
-    }
-
-    let targetUser = await getOrCreateUser(request.userId);
-
-    if (request.type === 'deposit') {
-        targetUser.balance += request.amount;
-        await targetUser.save();
-        
-        // ተጠቃሚውን ማሳወቅ
-        bot.telegram.sendMessage(request.userId, `🎉 **የዲፖዚት ጥያቄዎ ጸድቋል!**\n💰 አካውንትዎ ላይ **ETB ${request.amount}** ተጨምሯል።`).catch(() => {});
-        ctx.editMessageCaption(`✅ **የዲፖዚት ጥያቄ ጸድቋል! (Approved)**\n👤 ${request.userName} - ETB ${request.amount}`).catch(() => {
-            ctx.editMessageText(`✅ **የዲፖዚት ጥያቄ ጸድቋል! (Approved)**\n👤 ${request.userName} - ETB ${request.amount}`).catch(() => {});
-        });
-    } else if (request.type === 'withdraw') {
-        // ዊዝድሮ ቀድሞ ተቀንሷል፣ አሁን ጥያቄው ጸድቋል
-        bot.telegram.sendMessage(request.userId, `🎉 **የዊዝድሮ ጥያቄዎ ጸድቋል!**\n💵 ገንዘቡ ወደ ስልክ ቁጥርዎ (${targetUser.phone}) ተልኳል።`).catch(() => {});
-        ctx.editMessageCaption(`✅ **የዊዝድሮ ጥያቄ ጸድቋል! (Approved)**\n👤 ${request.userName} - ETB ${request.amount}`).catch(() => {
-            ctx.editMessageText(`✅ **የዊዝድሮ ጥያቄ ጸድቋል! (Approved)**\n👤 ${request.userName} - ETB ${request.amount}`).catch(() => {});
-        });
-    }
-
-    await RequestModel.findByIdAndDelete(reqId);
-    ctx.answerCbQuery('✅ ጥያቄው በተሳካ ሁኔታ ጸድቋል!');
-});
-
-bot.action(/reject_req_(.+)/, async (ctx) => {
-    if (ctx.from.id !== ADMIN_ID) return;
-    let reqId = ctx.match[1];
-    let request = await RequestModel.findById(reqId);
-
-    if (!request) {
-        return ctx.answerCbQuery('❌ ይህ ጥያቄ უკვე ተሰርዟል ወይም የለም!', { show_alert: true });
-    }
-
-    let targetUser = await getOrCreateUser(request.userId);
-
-    if (request.type === 'deposit') {
-        bot.telegram.sendMessage(request.userId, `❌ **የዲፖዚት ጥያቄዎ ውድቅ ተደርጓል!**\nእባክዎ ትክክለኛ መረጃ መላክዎን ያረጋግጡ።`).catch(() => {});
-    } else if (request.type === 'withdraw') {
-        // ዊዝድሮ ውድቅ ሲደረግ ቀድሞ ተቀንሶ የነበረው ገንዘብ ተመልሶ ለተጠቃሚው ይገባል
-        targetUser.balance += request.amount;
-        await targetUser.save();
-        bot.telegram.sendMessage(request.userId, `❌ **የዊዝድሮ ጥያቄዎ ውድቅ ተደርጓል!**\n💰 ETB ${request.amount} ተመላሽ ወደ አካውንትዎ ገብቷል።`).catch(() => {});
-    }
-
-    ctx.editMessageCaption(`❌ **የጥያቄ ውድቅ ተደርጓል! (Rejected)**\n👤 ${request.userName} - ETB ${request.amount}`).catch(() => {
-        ctx.editMessageText(`❌ **የጥያቄ ውድቅ ተደርጓል! (Rejected)**\n👤 ${request.userName} - ETB ${request.amount}`).catch(() => {});
-    });
-
-    await RequestModel.findByIdAndDelete(reqId);
-    ctx.answerCbQuery('❌ ጥያቄው ውድቅ ተደርጓል!');
-});
-
+// --- የተጫዋቾች ኮሜንቶች ዝርዝር (ከፎቶ ጋር እንዲታዩ) ---
 bot.hears('💬 የተጫዋቾች ኮሜንቶች', async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     let comments = await CommentModel.find().sort({ date: -1 }).limit(15);
     if (comments.length === 0) return ctx.reply('📭 ምንም አስተያየት የለም።', adminKeyboard);
+    
     for (let c of comments) {
         let replyStatus = c.adminReply ? `\n✅ **ምላሽ:** ${c.adminReply}` : `\n❌ ምላሽ አልተሰጠበትም`;
         let msg = `📌 **ከ:** ${c.userName} (ID: \`${c.userId}\`)\n💬 **መልእክት:** "${c.message}"${replyStatus}`;
-        let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ', `reply_comment_${c._id}`)]]);
-        await ctx.reply(msg, { parse_mode: 'Markdown', ...replyBtn });
+        let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ (በጽሑፍ/ፎቶ)', `reply_comment_${c._id}`)]]);
+        
+        if (c.photoId) {
+            await ctx.replyWithPhoto(c.photoId, { caption: msg, parse_mode: 'Markdown', ...replyBtn });
+        } else {
+            await ctx.reply(msg, { parse_mode: 'Markdown', ...replyBtn });
+        }
     }
 });
 
@@ -709,9 +677,145 @@ bot.action('check_bingo', async (ctx) => {
     }
 });
 
+bot.action(/approve_req_(.+)/, async (ctx) => {
+    if (ctx.from.id !== ADMIN_ID) return;
+    let reqId = ctx.match[1];
+    let req = await RequestModel.findById(reqId);
+    if (!req) return ctx.answerCbQuery('❌ ጥያቄው አልተገኘም!');
+
+    let user = await getOrCreateUser(req.userId);
+    if (req.type === 'deposit') {
+        user.balance += req.amount;
+        await user.save();
+        bot.telegram.sendMessage(req.userId, `🎉 **እንኳን ደስ አለዎት!** የ ETB ${req.amount} የዲፖዚት ጥያቄዎ በአድሚን ጸድቋል። ባላንስዎ ተሞልቷል! 💰`).catch(()=>{});
+    }
+
+    await RequestModel.findByIdAndDelete(reqId);
+    ctx.editMessageText(`✅ ጥያቄው ጸድቆ ተጠቃሚው ተሸልሟል/ባላንሱ ተስተካክሏል!`);
+});
+
+bot.action(/reject_req_(.+)/, async (ctx) => {
+    if (ctx.from.id !== ADMIN_ID) return;
+    let reqId = ctx.match[1];
+    let req = await RequestModel.findById(reqId);
+    if (!req) return ctx.answerCbQuery('❌ ጥያቄው አልተገኘም!');
+
+    if (req.type === 'withdraw') {
+        let user = await getOrCreateUser(req.userId);
+        user.balance += req.amount; 
+        await user.save();
+    }
+
+    bot.telegram.sendMessage(req.userId, `❌ **አሳዛኝ ሁኔታ!** የ ${req.type.toUpperCase()} ጥያቄዎ በአድሚን ውድቅ ተደርጓል።`).catch(()=>{});
+    await RequestModel.findByIdAndDelete(reqId);
+    ctx.editMessageText(`❌ ጥያቄው ውድቅ ተደርጓል!`);
+});
+
+// --- አድሚን ለኮሜንት ምላሽ ለመስጠት በተኑን ሲጫን ---
+bot.action(/reply_comment_(.+)/, async (ctx) => {
+    if (ctx.from.id !== ADMIN_ID) return;
+    let commentId = ctx.match[1];
+    userSteps[ADMIN_ID] = { action: 'admin_reply_comment', commentId };
+    ctx.answerCbQuery();
+    ctx.reply(`✍️ ለዚህ ኮሜንት የሚሰጡትን ምላሽ (ጽሑፍ እና/ወይም ፎቶ) አብረው ይላኩ፦`);
+});
+
+// --- ፎቶ (ስክሪንሾት ወይም አድሚን መልስ ፎቶ) ሲላክ የሚከናወን ---
+bot.on('photo', async (ctx) => {
+    const userId = ctx.from.id;
+    const userName = ctx.from.first_name || 'ተጫዋች';
+    let photo = ctx.message.photo[ctx.message.photo.length - 1];
+    let photoId = photo.file_id;
+    let photoUniqueId = photo.file_unique_id;
+
+    // 1. አድሚን ለኮሜንት በፎቶ (እና በጽሑፍ) ምላሽ ሲሰጥ
+    if (userId === ADMIN_ID && userSteps[ADMIN_ID] && userSteps[ADMIN_ID].action === 'admin_reply_comment') {
+        let commentId = userSteps[ADMIN_ID].commentId;
+        let replyText = ctx.message.caption || 'ለጥያቄዎ የተሰጠ የምላሽ ፎቶ';
+        delete userSteps[ADMIN_ID];
+
+        let comment = await CommentModel.findById(commentId);
+        if (!comment) return ctx.reply('❌ ኮሜንቱ አልተገኘም!');
+
+        comment.adminReply = replyText;
+        comment.adminPhotoId = photoId;
+        await comment.save();
+
+        // ለተጠቃሚው ማሳወቂያ እና ፎቶ መላክ
+        await bot.telegram.sendPhoto(comment.userId, photoId, {
+            caption: `📥 **ከአድሚን የተሰጠ ምላሽ:**\n\n${replyText}`,
+            parse_mode: 'Markdown'
+        }).catch(()=>{});
+
+        return ctx.reply(`✅ የምላሽ ፎቶ እና መልእክት ለተጠቃሚው በተሳካ ሁኔታ ተልኳል!`);
+    }
+
+    // 2. ተጠቃሚው ኮሜንት ስላክ ፎቶ (ስክሪንሾት) አብሮ ሲያያይዝ
+    if (userSteps[userId] && userSteps[userId].action === 'comment_waiting') {
+        let messageText = ctx.message.caption || 'ስክሪንሾት/ፎቶ ጥያቄ';
+        delete userSteps[userId];
+
+        let newComment = new CommentModel({
+            userId,
+            userName,
+            message: messageText,
+            photoId: photoId
+        });
+        await newComment.save();
+
+        ctx.reply(`✅ ፎቶዎ እና መልእክትዎ ለአድሚን ተልኳል! እናመሰግናለን።`, mainKeyboard);
+
+        // ለአድሚን በፎቶ ማሳወቂያ መላክ
+        let adminMsg = `📌 **አዲስ የኮሜንት/ጥያቄ ፎቶ መጣ!**\n\n👤 **ከ:** ${userName} (ID: \`${userId}\`)\n💬 **መልእክት:** "${messageText}"`;
+        let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ (በጽሑፍ/ፎቶ)', `reply_comment_${newComment._id}`)]]);
+        
+        return bot.telegram.sendPhoto(ADMIN_ID, photoId, { caption: adminMsg, parse_mode: 'Markdown', ...replyBtn }).catch(()=>{});
+    }
+
+    // 3. የዲፖዚት ስክሪንሾት ሂደት
+    if (userSteps[userId] && userSteps[userId].action === 'deposit_screenshot') {
+        let amount = userSteps[userId].amount;
+        let uploadDate = new Date();
+
+        let existingRequest = await RequestModel.findOne({ photoUniqueId });
+        if (existingRequest) {
+            delete userSteps[userId];
+            return ctx.reply(`❌ **ስህተት!** ይህ የክፍያ ስክሪንሾት ከዚህ በፊት ጥቅም ላይ ውሏል/ተልኳል። እባክዎ ትክክለኛ እና አዲስ ስክሪንሾት ይላኩ።`);
+        }
+
+        delete userSteps[userId];
+        let newReq = new RequestModel({
+            userId,
+            userName,
+            type: 'deposit',
+            amount,
+            details: 'Telegram Screenshot Deposit',
+            photoUniqueId,
+            photoId,
+            date: uploadDate
+        });
+        await newReq.save();
+
+        ctx.reply(`⏳ **የዲፖዚት ጥያቄዎ ደርሷል!**\nአድሚን አረጋግጦ እስኪልክልዎ ድረስ በትዕግስት ይጠብቁ።`);
+
+        let adminMsg = `📥 **አዲስ የዲፖዚት ጥያቄ መጣ!**\n\n` +
+            `👤 **ስም:** ${userName} (ID: \`${userId}\`)\n` +
+            `💰 **መጠን:** ETB ${amount}\n` +
+            `📅 **የተላከበት ቀን:** ${uploadDate.toLocaleString()}`;
+        
+        let adminKeyboard = Markup.inlineKeyboard([
+            [Markup.button.callback('✅ አጽድቅ', `approve_req_${newReq._id}`), Markup.button.callback('❌ ውድቅ አድርግ', `reject_req_${newReq._id}`)]
+        ]);
+
+        bot.telegram.sendPhoto(ADMIN_ID, photoId, { caption: adminMsg, parse_mode: 'Markdown', ...adminKeyboard }).catch(()=>{});
+    }
+});
+
+// --- የጽሑፍ ግብዓቶች (Text Input Handler) ---
 bot.on('text', async (ctx) => {
     const userId = ctx.from.id;
     const text = ctx.message.text.trim();
+    
     if (userId === ADMIN_ID && userSteps[ADMIN_ID]) {
         let step = userSteps[ADMIN_ID];
         if (step.action === 'admin_deposit_id') {
@@ -724,19 +828,34 @@ bot.on('text', async (ctx) => {
             delete userSteps[ADMIN_ID];
             ctx.reply(`✅ ዲፖዚቱ ተሳክቷል!`);
             return bot.telegram.sendMessage(step.targetId, `🎉 አድሚን አካውንትዎን ሞልቶታል። 💰`).catch(()=>{});
+        } 
+        // አድሚን ለኮሜንት በጽሑፍ ብቻ ምላሽ ሲሰጥ
+        else if (step.action === 'admin_reply_comment') {
+            let commentId = step.commentId;
+            delete userSteps[ADMIN_ID];
+
+            let comment = await CommentModel.findById(commentId);
+            if (!comment) return ctx.reply('❌ ኮሜንቱ አልተገኘም!');
+
+            comment.adminReply = text;
+            await comment.save();
+
+            await bot.telegram.sendMessage(comment.userId, `📥 **ከአድሚን የተሰጠ ምላሽ:**\n\n${text}`).catch(()=>{});
+            return ctx.reply(`✅ የምላሽ መልእክት ለተጠቃሚው ተልኳል!`);
         }
     }
 
     if (userSteps[userId]) {
         let stepInfo = userSteps[userId];
+        
         if (stepInfo.action === 'deposit_amount') {
             const amount = parseFloat(text.match(/[\d.]+/)?.[0] || 0);
-            delete userSteps[userId];
-            let newReq = new RequestModel({ userId, userName: ctx.from.first_name, type: 'deposit', amount, details: 'Transaction' });
-            await newReq.save();
-            ctx.reply(`✅ የ ETB ${amount} የዲፖዚት ጥያቄዎ ለአድሚን ተልኳል!`);
-            return;
+            if (amount <= 0) return ctx.reply(`❌ እባክዎ ትክክለኛ የብር መጠን ያስገቡ።`);
+            
+            userSteps[userId] = { action: 'deposit_screenshot', amount };
+            return ctx.reply(`📸 እናመሰግናለን! አሁን እባክዎ **የተላከበትን የክፍያ ስክሪንሾት (Screenshot) ፎቶ** በዚህ ቦት ላይ ይላኩልን:`);
         }
+
         if (stepInfo.action === 'withdraw_amount') {
             const amount = parseFloat(text.match(/[\d.]+/)?.[0] || 0);
             delete userSteps[userId];
@@ -746,17 +865,24 @@ bot.on('text', async (ctx) => {
             await user.save();
             let newReq = new RequestModel({ userId, userName: user.userName, type: 'withdraw', amount, details: user.phone });
             await newReq.save();
-            ctx.reply(`⏳ የዊዝድሮ ጥያቄዎ ለአድሚን ተልኳል!`);
+            ctx.reply(`⏳ የዊዝድሮ ጥያቄዎ ለአድሚን ተልኳል! አድሚን ሲያረጋግጥ ይለቀቅልዎታል።`);
             return;
         }
-        if (stepInfo.action === 'send_comment') {
+
+        // ተጠቃሚው በጽሑፍ ብቻ ኮሜንት ሲልክ
+        if (stepInfo.action === 'comment_waiting') {
             delete userSteps[userId];
             let newComment = new CommentModel({ userId, userName: ctx.from.first_name, message: text });
             await newComment.save();
-            return ctx.reply(`✅ አስተያየትዎ ለአድሚን ተልኳል!`);
+            
+            ctx.reply(`✅ አስተያየትዎ ለአድሚን ተልኳል!`, mainKeyboard);
+            
+            let adminMsg = `📌 **አዲስ የኮሜንት/ጥያቄ መጣ!**\n\n👤 **ከ:** ${ctx.from.first_name} (ID: \`${userId}\`)\n💬 **መልእክት:** "${text}"`;
+            let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ (በጽሑፍ/ፎቶ)', `reply_comment_${newComment._id}`)]]);
+            return bot.telegram.sendMessage(ADMIN_ID, adminMsg, { parse_mode: 'Markdown', ...replyBtn }).catch(()=>{});
         }
     }
 });
 
 bot.launch();
-console.log('🤖 Efuye Bingo Ultimate Bot with Web App & CSS is running successfully!');
+console.log('🤖 Efuye Bingo Ultimate Bot with Photo Comments & Admin Replies is running successfully!');
