@@ -467,13 +467,15 @@ bot.hears('💵 አድሚን ዲፖዚት ማድረግ', (ctx) => {
     ctx.reply(`💵 ገንዘብ ገቢ ሊደረግለት የሚገባውን የተጫዋች **User ID** ያስገቡ:`);
 });
 
+// --- የተስተካከለው የአድሚን መጫወቻ አዝራሮች (10፣ 20፣ 50፣ 100 እና ኬኖ) ---
 bot.hears('🎮 አድሚን መጫወቻ (Admin Play)', (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     ctx.reply(
         `🎮 **ለአድሚን የመጫወቻ መጠን ይምረጡ:**`,
         Markup.inlineKeyboard([
             [Markup.button.callback('Play 10 ETB', 'play_10'), Markup.button.callback('Play 20 ETB', 'play_20')],
-            [Markup.button.callback('Play 50 ETB', 'play_50'), Markup.button.callback('Play 100 ETB', 'play_100')]
+            [Markup.button.callback('Play 50 ETB', 'play_50'), Markup.button.callback('Play 100 ETB', 'play_100')],
+            [Markup.button.callback('🎲 ኬኖ ጨዋታ (Keno)', 'select_keno')]
         ])
     );
 });
@@ -490,7 +492,7 @@ bot.action(/ban_user_(\d+)/, async (ctx) => {
     ctx.editMessageText(`✅ ዩዘር ID \`${targetUserId}\` ያለው ተጫዋች ከሲስተሙ ተወግዷል!`, { parse_mode: 'Markdown' });
 });
 
-// --- ቢንጎ ጨዋታ ማስጀመር (በጥንቱ አሰራር) ---
+// --- ቢንጎ ጨዋታ ማስጀመር (የ 10, 20, 50 እና 100 ብር ሃንድለሮች) ---
 bot.action(/play_(\d+)/, async (ctx) => {
     const userId = ctx.from.id;
     const cost = parseInt(ctx.match[1]);
