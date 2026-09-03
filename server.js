@@ -231,18 +231,20 @@ bot.hears('🎮 ፕለይ (Play)', (ctx) => {
     ctx.reply(
         `🎮 **እባክዎ መጫወት የሚፈልጉትን ጨዋታ ይምረጡ፦**`,
         Markup.inlineKeyboard([
-            [Markup.button.callback('🎯 ቢንጎ ጨዋታ (Bingo)', 'select_bingo')],
+            [Markup.button.callback('🎯 ቢንጎ ጨዋታ (Bingo)', 'select_bingo_main')],
             [Markup.button.callback('🎲 ኬኖ ጨዋታ (Keno)', 'select_keno')]
         ])
     );
 });
 
-bot.action('select_bingo', (ctx) => {
+// --- ተጫዋቹ "ቢንጎ ጨዋታ" ሲጫን የገንዘብ ምርጫው ይመጣል ---
+bot.action('select_bingo_main', (ctx) => {
     ctx.editMessageText(
-        `🎯 **የቢንጎ መጫወቻ የገንዘብ መጠን ይምረጡ:**`,
+        `🎯 **የቢንጎ ጨዋታ - የውርርድ መጠን ይምረጡ:**\n\nእባክዎ መጫወት የሚፈልጉትን የብር መጠን ይምረጡ:`,
         Markup.inlineKeyboard([
             [Markup.button.callback('Play 10 ETB', 'play_10'), Markup.button.callback('Play 20 ETB', 'play_20')],
-            [Markup.button.callback('Play 50 ETB', 'play_50'), Markup.button.callback('Play 100 ETB', 'play_100')]
+            [Markup.button.callback('Play 50 ETB', 'play_50'), Markup.button.callback('Play 100 ETB', 'play_100')],
+            [Markup.button.callback('🔙 ወደ ዋናው ሜኑ', 'back_to_main_menu')]
         ])
     );
 });
@@ -411,7 +413,7 @@ bot.action('start_keno_draw', async (ctx) => {
 
 bot.action('back_to_main_menu', (ctx) => {
     ctx.editMessageText(`🎲 **እፉዬ ጨዋታዎች ማዕከል**\n\nእባክዎ የሚፈልጉትን ጨዋታ ይምረጡ፦`, Markup.inlineKeyboard([
-        [Markup.button.callback('🎯 ቢንጎ ጨዋታ (Bingo)', 'select_bingo')],
+        [Markup.button.callback('🎯 ቢንጎ ጨዋታ (Bingo)', 'select_bingo_main')],
         [Markup.button.callback('🎲 ኬኖ ጨዋታ (Keno)', 'select_keno')]
     ]));
 });
