@@ -77,7 +77,7 @@ const ADMIN_PAYMENT_INFO = `🏦 **የአድሚን የክፍያ አካውንቶ�
 let userSteps = {}; 
 let activeGames = {}; 
 let waitingRoom = {}; 
-let kenoSessions = {}; // የኬኖ ጨዋታ ክፍለ ጊዜዎችን ለመያዝ
+let kenoSessions = {}; 
 
 async function getOrCreateUser(userId, userName = 'ተጫዋች') {
     let user = await User.findOne({ userId });
@@ -96,7 +96,6 @@ app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
 
-// --- 🎯 የኬኖ ጨዋታ ሎጅክ ማስተካከያ ---
 function getKenoKeyboard(selectedNumbers = []) {
     let keyboard = [];
     let row = [];
@@ -114,7 +113,6 @@ function getKenoKeyboard(selectedNumbers = []) {
     return Markup.inlineKeyboard(keyboard);
 }
 
-// --- የቢንጎ ማትሪክስ ጄነሬተር ---
 function generateBingoCard() {
     let card = [];
     for (let col = 0; col < 5; col++) {
@@ -226,7 +224,6 @@ bot.on('contact', async (ctx) => {
     ctx.reply(`✅ ስልክ ቁጥርዎ በተሳካ ሁኔታ ተመዝግቧል!`, mainKeyboard);
 });
 
-// --- 🎮 ፕለይ ሲጫን ጨዋታዎችን መምረጫ (ቢንጎ ወይስ ኬኖ) ---
 bot.hears('🎮 ፕለይ (Play)', (ctx) => {
     ctx.reply(
         `🎮 **እባክዎ መጫወት የሚፈልጉትን ጨዋታ ይምረጡ፦**`,
@@ -237,7 +234,6 @@ bot.hears('🎮 ፕለይ (Play)', (ctx) => {
     );
 });
 
-// --- ተጫዋቹ "ቢንጎ ጨዋታ" ሲጫን የገንዘብ ምርጫው ይመጣል ---
 bot.action('select_bingo_main', (ctx) => {
     ctx.editMessageText(
         `🎯 **የቢንጎ ጨዋታ - የውርርድ መጠን ይምረጡ:**\n\nእባክዎ መጫወት የሚፈልጉትን የብር መጠን ይምረጡ:`,
@@ -249,7 +245,6 @@ bot.action('select_bingo_main', (ctx) => {
     );
 });
 
-// --- የኬኖ ዋጋ መምረጫ ---
 bot.action('select_keno', (ctx) => {
     ctx.editMessageText(
         `🎲 **የኬኖ ጨዋታ - የውርርድ መጠን ይምረጡ:**\n\nእባክዎ መጫወት የሚፈልጉትን የብር መጠን ይምረጡ:`,
@@ -278,7 +273,6 @@ bot.action(/keno_bet_(\d+)/, async (ctx) => {
     );
 });
 
-// --- ኬኖ ቁጥር ምርጫ ሎጂክ ---
 bot.action(/keno_num_(\d+)/, async (ctx) => {
     const userId = ctx.from.id;
     const num = parseInt(ctx.match[1]);
@@ -303,7 +297,6 @@ bot.action(/keno_num_(\d+)/, async (ctx) => {
     ).catch(()=>{});
 });
 
-// --- ኬኖ በየ 3 ሰከንድ የሚወጣ አውቶ ድሮ (Auto Draw with 3 Seconds Interval) ---
 bot.action('start_keno_draw', async (ctx) => {
     const userId = ctx.from.id;
     let session = kenoSessions[userId];
@@ -359,10 +352,21 @@ bot.action('start_keno_draw', async (ctx) => {
             let matchCount = matches.length;
             let winAmount = 0;
 
-            if (matchCount >= 5) {
-                winAmount = betAmount * matchCount * 1.5;
-            } else if (matchCount >= 8) {
-                winAmount = betAmount * matchCount * 3;
+            // የተስተካከለ የኬኖ ሽልማት ስሌት
+            if (matchCount === 10) {
+                winAmount = betAmount * 50;
+            } else if (matchCount === 9) {
+                winAmount = betAmount * 20;
+            } else if (matchCount === 8) {
+                winAmount = betAmount * 10;
+            } else if (matchCount === 7) {
+                winAmount = betAmount * 5;
+            } else if (matchCount === 6) {
+                winAmount = betAmount * 3;
+            } else if (matchCount === 5) {
+                winAmount = betAmount * 2;
+            } else if (matchCount >= 3 && matchCount <= 4) {
+                winAmount = betAmount * 1;
             }
 
             let resultMsg = "";
@@ -408,7 +412,7 @@ bot.action('start_keno_draw', async (ctx) => {
             delete kenoSessions[userId];
             await ctx.editMessageText(resultMsg, Markup.inlineKeyboard(keyboardOptions));
         }
-    }, 3000); // በየ 3 ሰከንድ (3000 ms)
+    }, 3000);
 });
 
 bot.action('back_to_main_menu', (ctx) => {
@@ -476,7 +480,6 @@ bot.hears('📖 መመሪያ (Instructions)', (ctx) => {
     );
 });
 
-// --- አድሚን ሜኑዎች ---
 bot.hears('📊 የአድሚን ባላንስ ማየት', async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     let users = await User.find();
@@ -561,7 +564,6 @@ bot.action(/ban_user_(\d+)/, async (ctx) => {
     ctx.editMessageText(`✅ ዩዘር ID \`${targetUserId}\` ያለው ተጫዋች ከሲስተሙ ተወግዷል!`, { parse_mode: 'Markdown' });
 });
 
-// --- ቢንጎ ጨዋታ ማስጀመር (10, 20, 50 እና 100 ብር) ---
 bot.action(/play_(\d+)/, async (ctx) => {
     const userId = ctx.from.id;
     const cost = parseInt(ctx.match[1]);
@@ -893,4 +895,4 @@ bot.on('text', async (ctx) => {
 });
 
 bot.launch();
-console.log('🤖 Efuye Bingo & Keno Ultimate Bot is running successfully!');
+console.log('🤖 Efuye Bingo & Keno Ultimate Bot is running successfully with Keno win fix!');
