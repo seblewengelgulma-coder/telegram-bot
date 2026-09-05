@@ -22,7 +22,7 @@ mongoose.connect(MONGO_URI)
 }).catch(err => {
     console.error('❌ MongoDB connection error:', err);
     process.exit(1);
-});
+} );
 
 // --- 2. ዳታቤዝ ስኬማዎች (Schemas) ---
 const userSchema = new mongoose.Schema({
@@ -103,8 +103,8 @@ app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
 
-// የኬኖ ኪቦርድ (ቁጥሮች + የሽልማት ማሳያ መረጃ ሰጪ አዝራሮች)
-function getKenoKeyboard(selectedNumbers = []) {
+// የኬኖ ኪቦርድ እና አጠቃላይ የክፍያ ሁኔታ ማሳያ (Live Payout Info)
+function getKenoKeyboard(selectedNumbers = [], betAmount = 10) {
     let keyboard = [];
     let row = [];
     for (let i = 1; i <= 80; i++) {
@@ -120,6 +120,35 @@ function getKenoKeyboard(selectedNumbers = []) {
     keyboard.push([Markup.button.callback('🎲 ኬኖ ጨዋታ ጀምር (Draw)', 'start_keno_draw')]);
     keyboard.push([Markup.button.callback('🔙 ወደ ዋናው ሜኑ', 'back_to_main_menu')]);
     return Markup.inlineKeyboard(keyboard);
+}
+
+// የተመረጡ ቁጥሮች መጠን ታይቶ የሚደርሰውን ሽልማት የሚያሳይ ጽሁፍ ማመንጫ
+function getKenoStatusText(selectedNumbers, betAmount, userBalance) {
+    let count = selectedNumbers.length;
+    let potentialWin = 0;
+    let desc = "";
+
+    if (count === 10) potentialWin = betAmount * 50;
+    else if (count === 9) potentialWin = betAmount * 20;
+    else if (count === 8) potentialWin = betAmount * 10;
+    else if (count === 7) potentialWin = betAmount * 5;
+    else if (count === 6) potentialWin = betAmount * 3;
+    else if (count === 5) potentialWin = betAmount * 2;
+    else if (count >= 1 && count <= 4) potentialWin = betAmount * 1;
+
+    if (count === 0) {
+        desc = "💡 *እባክዎ ከ 1 እስከ 10 ቁጥሮች ይምረጡ።*";
+    } else if (count <= 3) {
+        desc = `✨ **ሁኔታ:** ${count} ቁጥር መርጠዋል (1 ሲደርስ ገንዘብዎ **${betAmount} ETB** ተመላሽ [Refund] ይሆናል፤ ሙሉውን ከጠሩም በዚያው ልክ ያሸንፋሉ!)`;
+    } else {
+        desc = `✨ **ሁኔታ:** ${count} ቁጥር መርጠዋል (ሁሉንም ከጠሩ **${potentialWin} ETB** አሸናፊ ይሆኑበታል!)`;
+    }
+
+    return `🎲 **ኬኖ ጨዋታ (የውርርድ መጠን: ${betAmount} ETB)**\n\n` +
+           `የመረጧቸው ቁጥሮች: [ **${selectedNumbers.sort((a,b)=>a-b).join(', ')}** ] (${count}/10)\n\n` +
+           `${desc}\n\n` +
+           `💰 ከታች 100% ሙሉውን ሲያሸንፉ የሚደርስዎት ከፍተኛ ሽልማት: **ETB ${potentialWin}**\n` +
+           `አካውንት ባላንስ: **ETB ${userBalance.toFixed(2)}**`;
 }
 
 // የቢንጎ 1-100 ቁጥሮች ሰሌዳ
@@ -430,13 +459,8 @@ bot.action(/keno_bet_(\d+)/, async (ctx) => {
 
     kenoSessions[userId] = { selectedNumbers: [], betAmount: betAmount };
 
-    ctx.editMessageText(
-        `🎲 **ኬኖ ጨዋታ (የውርርድ መጠን: ${betAmount} ETB)**\n\n` +
-        `ከ 1 እስከ 80 ካሉት ቁጥሮች **ከ 1 እስከ 10 ቁጥሮች** ይምረጡ (አሁን የተመረጡ: 0):\n\n` +
-        `💡 *ማሳሰቢያ:* ታማኝነትን ለመመልከት ከታች ያለውን **የሽልማት ሰንጠረዥ** መመልከት ይችላሉ።\n\n` +
-        `አካውንት ባላንስ: **ETB ${user.balance.toFixed(2)}**`,
-        getKenoKeyboard([])
-    );
+    let textMsg = getKenoStatusText([], betAmount, user.balance);
+    ctx.editMessageText(textMsg, getKenoKeyboard([], betAmount));
 });
 
 // የሽልማት ሰንጠረዥ (Payout Table) ለተጫዋቾች ታማኝነት ማሳያ
@@ -461,12 +485,8 @@ bot.action('back_to_keno', async (ctx) => {
     let session = kenoSessions[userId] || { selectedNumbers: [], betAmount: 10 };
     let user = await getOrCreateUser(userId);
 
-    ctx.editMessageText(
-        `🎲 **ኬኖ ጨዋታ (የውርርድ መጠን: ${session.betAmount} ETB)**\n\n` +
-        `የመረጧቸው ቁጥሮች: [ **${session.selectedNumbers.sort((a,b)=>a-b).join(', ')}** ] (${session.selectedNumbers.length}/10)\n\n` +
-        `አካውንት ባላንስ: **ETB ${user.balance.toFixed(2)}**`,
-        getKenoKeyboard(session.selectedNumbers)
-    );
+    let textMsg = getKenoStatusText(session.selectedNumbers, session.betAmount, user.balance);
+    ctx.editMessageText(textMsg, getKenoKeyboard(session.selectedNumbers, session.betAmount));
 });
 
 bot.action(/keno_num_(\d+)/, async (ctx) => {
@@ -487,12 +507,9 @@ bot.action(/keno_num_(\d+)/, async (ctx) => {
     }
 
     let user = await getOrCreateUser(userId);
-    ctx.editMessageText(
-        `🎲 **ኬኖ ጨዋታ (የውርርድ መጠን: ${session.betAmount} ETB)**\n\n` +
-        `የመረጧቸው ቁጥሮች: [ **${session.selectedNumbers.sort((a,b)=>a-b).join(', ')}** ] (${session.selectedNumbers.length}/10)\n\n` +
-        `አካውንት ባላንስ: **ETB ${user.balance.toFixed(2)}**`,
-        getKenoKeyboard(session.selectedNumbers)
-    ).catch(()=>{});
+    let textMsg = getKenoStatusText(session.selectedNumbers, session.betAmount, user.balance);
+
+    ctx.editMessageText(textMsg, getKenoKeyboard(session.selectedNumbers, session.betAmount)).catch(()=>{});
 });
 
 bot.action('start_keno_draw', async (ctx) => {
@@ -723,7 +740,7 @@ bot.hears('💬 የተጫዋቾች ኮሜንቶች', async (ctx) => {
     
     for (let c of comments) {
         let replyStatus = c.adminReply ? `\n✅ **ምላሽ:** ${c.adminReply}` : `\n❌ ምላሽ አልተሰጠበትም`;
-        let msg = `📌 **ከ:** ${c.userName} (ID: \`${c.userId}\`)\n💬 **መልእክት:** "${c.message}"${replyStatus}`;
+        let msg = `📌 **ከ:** ${c.userName} (ID: \`${userId}\`)\n💬 **መልእክት:** "${c.message}"${replyStatus}`;
         let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ', `reply_comment_${c._id}`)]]);
         
         if (c.photoId) {
@@ -995,4 +1012,4 @@ bot.on('text', async (ctx) => {
 });
 
 bot.launch();
-console.log('🤖 Bot is running with Keno Payout Table & Bingo 1-100 Taken Board!');
+console.log('🤖 Bot is running with Live Keno Payout Update & Bingo 1-100 Taken Board!');
