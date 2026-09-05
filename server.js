@@ -122,7 +122,7 @@ function getKenoKeyboard(selectedNumbers = [], betAmount = 10) {
     return Markup.inlineKeyboard(keyboard);
 }
 
-// የኬኖ ሁኔታ (ገንዘቡ ያለ ነጥብ ሙሉ ቁጥር እንዲሆን ተደርጓል)
+// የኬኖ ሁኔታ (አጠቃላይ የሚገኘው ገንዘብ: ያስያዙት + (ያስያዙት * ማባዣ) ሆኖ ከነጥብ ነጻ ተደርጓል)
 function getKenoStatusText(selectedNumbers, betAmount, userBalance) {
     let count = selectedNumbers.length;
     let multiplier = 0;
@@ -138,20 +138,20 @@ function getKenoStatusText(selectedNumbers, betAmount, userBalance) {
     else if (count === 2) { multiplier = 0.3; }
     else if (count === 1) { multiplier = 0.2; }
 
-    // Math.round በመጠቀም ከነጥብ ነጻ የሆነ ሙሉ ቁጥር እናደርገዋለን
-    let potentialWin = Math.round(betAmount * multiplier);
+    // ያስያዙት ገንዘብ ሲደመር (ያስያዙት በ ማባዣ ተባዝቶ) አጠቃላይ የሚመለሰው ገንዘብ
+    let potentialWin = Math.round(betAmount + (betAmount * multiplier));
 
     let desc = "";
     if (count === 0) {
         desc = "💡 *እባክዎ ከ 1 እስከ 10 ቁጥሮች ይምረጡ።*";
     } else {
-        desc = `✨ **ሁኔታ:** ${count} ቁጥር መርጠዋል (ሙሉውን ከጠሩ **${multiplier}x** እጥፍ ያተርፋሉ!)`;
+        desc = `✨ **ሁኔታ:** ${count} ቁጥር መርጠዋል (ማባዣው **${multiplier}x** ነው)`;
     }
 
     return `🎲 **ኬኖ ጨዋታ (የውርርድ መጠን: ${betAmount} ETB)**\n\n` +
            `የመረጧቸው ቁጥሮች: [ **${selectedNumbers.sort((a,b)=>a-b).join(', ')}** ] (${count}/10)\n\n` +
            `${desc}\n\n` +
-           `💰 ሙሉውን ሲያሸንፉ የሚደርስዎት ሽልማት: **ETB ${potentialWin}**\n` +
+           `💰 ሙሉውን ሲያሸንፉ የሚደርስዎት ጠቅላላ ሽልማት: **ETB ${potentialWin}**\n` +
            `አካውንት ባላንስ: **ETB ${userBalance}**`;
 }
 
@@ -575,20 +575,20 @@ bot.action('start_keno_draw', async (ctx) => {
             let selectedCount = session.selectedNumbers.length;
 
             if (matchCount === selectedCount) {
-                let rawWin = 0;
-                if (selectedCount === 10) { rawWin = betAmount * 20; }
-                else if (selectedCount === 9) { rawWin = betAmount * 10; }
-                else if (selectedCount === 8) { rawWin = betAmount * 6; }
-                else if (selectedCount === 7) { rawWin = betAmount * 3.5; }
-                else if (selectedCount === 6) { rawWin = betAmount * 2; }
-                else if (selectedCount === 5) { rawWin = betAmount * 1.2; }
-                else if (selectedCount === 4) { rawWin = betAmount * 0.8; }
-                else if (selectedCount === 3) { rawWin = betAmount * 0.5; }
-                else if (selectedCount === 2) { rawWin = betAmount * 0.3; }
-                else if (selectedCount === 1) { rawWin = betAmount * 0.2; }
+                let multiplier = 0;
+                if (selectedCount === 10) { multiplier = 20; }
+                else if (selectedCount === 9) { multiplier = 10; }
+                else if (selectedCount === 8) { multiplier = 6; }
+                else if (selectedCount === 7) { multiplier = 3.5; }
+                else if (selectedCount === 6) { multiplier = 2; }
+                else if (selectedCount === 5) { multiplier = 1.2; }
+                else if (selectedCount === 4) { multiplier = 0.8; }
+                else if (selectedCount === 3) { multiplier = 0.5; }
+                else if (selectedCount === 2) { multiplier = 0.3; }
+                else if (selectedCount === 1) { multiplier = 0.2; }
 
-                // የማሸነፊያው መጠን ከነጥብ ነጻ (ሙሉ ቁጥር) እንዲሆን በ Math.round ተጠቅልሏል
-                winAmount = Math.round(rawWin);
+                // ጠቅላላ የሚመለሰው ገንዘብ = ያስያዙት ብር + (ያስያዙት ብር * ማባዣ)
+                winAmount = Math.round(betAmount + (betAmount * multiplier));
             }
 
             let resultMsg = "";
@@ -605,7 +605,7 @@ bot.action('start_keno_draw', async (ctx) => {
                 resultMsg = `🎉 **እንኳን ደስ አሎት! አሸንፈዋል!** 🏆\n\n` +
                     `🎯 የመረጧቸው: [ ${session.selectedNumbers.sort((a,b)=>a-b).join(', ')} ]\n` +
                     `✨ ግጥሚያዎች: **${matchCount}/${selectedCount}** ሙሉውን ጠርተዋል!\n` +
-                    `💰 ያሸነፉት: **ETB ${winAmount}**\n\n` +
+                    `💰 ያሸነፉት ጠቅላላ ገንዘብ: **ETB ${winAmount}**\n\n` +
                     `💼 ባላንስዎ: **ETB ${user.balance}**`;
 
                 keyboardOptions = [
@@ -1014,4 +1014,4 @@ bot.on('text', async (ctx) => {
 });
 
 bot.launch();
-console.log('🤖 Bot is running with Integer (Whole Number) Keno Payouts!');
+console.log('🤖 Bot is running with Correct Total Payout Formula (Bet + Bet*Multiplier)!');
