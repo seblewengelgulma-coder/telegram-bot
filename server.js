@@ -12,7 +12,7 @@ app.use(express.json());
 const MONGO_URI = process.env.MONGO_URI;
 
 if (!MONGO_URI) {
-    console.error('❌ MONGODB_URI is not defined in environment variables! Please set it on your .env file.');
+    console.error('❌ MONGODB_URI is not defined in environment variables!');
     process.exit(1);
 }
 
@@ -60,7 +60,6 @@ const commentSchema = new mongoose.Schema({
 });
 const CommentModel = mongoose.model('Comment', commentSchema);
 
-// ለተያዙ የቢንጎ 1-100 ቁጥሮች ዳታቤዝ
 const takenNumberSchema = new mongoose.Schema({
     number: { type: Number, unique: true, required: true },
     userId: { type: Number, required: true },
@@ -71,12 +70,12 @@ const TakenNumber = mongoose.model('TakenNumber', takenNumberSchema);
 // --- 3. ቦት እና አድሚን ማዋቀር ---
 const TOKEN = process.env.BOT_TOKEN;
 if (!TOKEN) {
-    console.error('❌ BOT_TOKEN is not defined in environment variables!');
+    console.error('❌ BOT_TOKEN is not defined!');
     process.exit(1);
 }
 
 const bot = new Telegraf(TOKEN);
-const ADMIN_ID = 380035906; // የአድሚን ID
+const ADMIN_ID = 380035906;
 
 const ADMIN_PAYMENT_INFO = `🏦 **የአድሚን የክፍያ አካውንቶች (ለዲፖዚት)**\n\n` +
     `1. **ንግድ ባንክ (CBE):** 10005741880 (ቴዎድሮስ / እፉዬ)\n` +
@@ -104,7 +103,7 @@ app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
 
-// የኬኖ ቁጥሮች ኪቦርድ (1 እስከ 80)
+// የኬኖ ኪቦርድ (ቁጥሮች + የሽልማት ማሳያ መረጃ ሰጪ አዝራሮች)
 function getKenoKeyboard(selectedNumbers = []) {
     let keyboard = [];
     let row = [];
@@ -117,17 +116,17 @@ function getKenoKeyboard(selectedNumbers = []) {
             row = [];
         }
     }
+    keyboard.push([Markup.button.callback('📊 የሽልማት ሰንጠረዥ (Payout Table)', 'view_payout_table')]);
     keyboard.push([Markup.button.callback('🎲 ኬኖ ጨዋታ ጀምር (Draw)', 'start_keno_draw')]);
     keyboard.push([Markup.button.callback('🔙 ወደ ዋናው ሜኑ', 'back_to_main_menu')]);
     return Markup.inlineKeyboard(keyboard);
 }
 
-// ከ 1 እስከ 100 ቁጥሮች ያሉበት የቢንጎ መምረጫ ሰሌዳ (የተያዙ በ ✅ የሚለዩበት)
+// የቢንጎ 1-100 ቁጥሮች ሰሌዳ
 async function getBingo1to100Keyboard() {
     let keyboard = [];
     let row = [];
     
-    // በዳታቤዝ የተያዙትን ቁጥሮች በሙሉ ማምጣት
     let takenDocs = await TakenNumber.find({});
     let takenMap = {};
     takenDocs.forEach(doc => { takenMap[doc.number] = true; });
@@ -148,7 +147,6 @@ async function getBingo1to100Keyboard() {
     return Markup.inlineKeyboard(keyboard);
 }
 
-// 24 ቁጥሮች በዘፈቀደ ማመንጫ
 function generateRandomBingoCard() {
     let numbers = [];
     while (numbers.length < 24) {
@@ -238,7 +236,7 @@ bot.start(async (ctx) => {
 
     if (!user.phone) {
         return ctx.reply(
-            `🎲 **እፉዬ ጨዋታዎች ማዕከል** - እንኳን ደህና መጡ ${userName}!\n\nቦቱን ለመጠቀም እባክዎ ከታች ያለውን አዝራር በመጫን **ስልክ ቁጥርዎን** ያጋሩ (Share Contact):`,
+            `🎲 **እፉዬ ጨዋታዎች ማዕከል** - እንኳን ደህና መጡ ${userName}!\n\nቦቱን ለመጠቀም እባክዎ ከታች ያለውን አዝራር በመጫን **ስልክ ቁጥርዎን** ያጋሩ:`,
             Markup.keyboard([[Markup.button.contactRequest('📱 ስልክ ቁጥር አጋራ (Share Contact)')]]).resize()
         );
     }
@@ -276,47 +274,39 @@ bot.action('select_bingo_main', (ctx) => {
     );
 });
 
-// የቢንጎ የዋጋ ምርጫ ሲደረግ ከ 1 እስከ 100 ቁጥሮች ማሳያ ሰሌዳ ማምጣት
 bot.action(/play_(\d+)/, async (ctx) => {
     const cost = parseInt(ctx.match[1]);
     let keyboard = await getBingo1to100Keyboard();
     ctx.editMessageText(
-        `🎯 **የቢንጎ ጨዋታ (ETB ${cost})**\n\nከዚህ በታች ካሉት **ከ 1 እስከ 100** ቁጥሮች ውስጥ የሚፈልጉትን አንድ ቁጥር ይምረጡ (የተያዙት በ ✅ ታይተዋል):`,
+        `🎯 **የቢንጎ ጨዋታ (ETB ${cost})**\n\nከዚህ በታች ካሉት **ከ 1 እስከ 100** ቁጥሮች ውስጥ የሚፈልጉትን አንድ ቁጥር ይምረጡ:`,
         keyboard
     );
 });
 
-// ተጫዋቹ አስቀድሞ የተያዘ ቁጥር ሲነካ
 bot.action(/b_taken_(\d+)/, async (ctx) => {
     const num = parseInt(ctx.match[1]);
-    return ctx.answerCbQuery(`⚠️ ይቅርታ! ቁጥር ${num} በሌላ ተጫዋች ተይዟል! እባክዎ ሌላ ቁጥር ይምረጡ።`, { show_alert: true });
+    return ctx.answerCbQuery(`⚠️ ይቅርታ! ቁጥር ${num} በሌላ ተጫዋች ተይዟል!`, { show_alert: true });
 });
 
-// ተጫዋቹ ያልተያዘ ቁጥር ሲመርጥ
 bot.action(/b_pick_(\d+)/, async (ctx) => {
     const userId = ctx.from.id;
     const userName = ctx.from.first_name || 'ተጫዋች';
     const num = parseInt(ctx.match[1]);
 
-    // በሰኮንዶች ልዩነት ሌላ ሰው እንዳይቀድመው በዳታቤዝ ማረጋገጥ
     try {
         let existing = await TakenNumber.findOne({ number: num });
         if (existing) {
             let updatedKb = await getBingo1to100Keyboard();
-            await ctx.editMessageText(`⚠️ ይህ ቁጥር አሁን በሌላ ተጫዋች ተይዟል! እባክዎ ሌላ ይምረጡ፦`, updatedKb);
+            await ctx.editMessageText(`⚠️ ይህ ቁጥር አሁን በሌላ ተጫዋች ተይዟል!`, updatedKb);
             return ctx.answerCbQuery(`❌ ቁጥሩ ተይዟል!`, { show_alert: true });
         }
 
-        // ቁጥሩን መያዝ
         await TakenNumber.create({ number: num, userId, userName });
 
-        // የ 10 ብር/20 ብር ወዘተ ክፍያ ማስተካከል
         let user = await getOrCreateUser(userId);
-        // እዚህጋ የውርርድ መጠኑን በሲስተሙ ለመያዝ (ለጊዜው በ 10 ብር ነባሪ ወይም ከሜኑ የመጣውን መውሰድ ይቻላል)
-        let cost = 10; // በሂደት ከቀድሞው ስቴፕ ጋር ማስተካከል ይቻላል
+        let cost = 10; 
 
         if (userId !== ADMIN_ID && user.balance < cost) {
-            // ከተያዘው ሰሌዳ ላይ መልሶ መሰረዝ
             await TakenNumber.findOneAndDelete({ number: num });
             return ctx.answerCbQuery('❌ በቂ ባላንስ የለዎትም!', { show_alert: true });
         }
@@ -332,14 +322,14 @@ bot.action(/b_pick_(\d+)/, async (ctx) => {
         waitingRoom[cost].push({ userId, ctx, matrix, cost });
 
         await ctx.editMessageText(
-            `⏳ **ቁጥር ${num} ተመርጧል! የ ተጫዋቾችን በመጠበቅ ላይ (30 ሰከንድ)...**\nካርድዎ በራስ-ሰር ተዘጋጅቷል!`,
+            `⏳ **ቁጥር ${num} ተመርጧል! ተጫዋቾችን በመጠበቅ ላይ (30 ሰከንድ)...**`,
             Markup.inlineKeyboard([])
         );
 
         runBingoQueue(cost);
 
     } catch (e) {
-        return ctx.answerCbQuery(`❌ ስህተት ተፈጥሯል, እንደገና ይሞክሩ!`, { show_alert: true });
+        return ctx.answerCbQuery(`❌ ስህተት ተፈጥሯል!`, { show_alert: true });
     }
 });
 
@@ -357,7 +347,7 @@ function runBingoQueue(cost) {
                     await pUser.save();
                 }
                 try {
-                    await p.ctx.editMessageText(`⚠️ **በቂ ተጫዋች ባለመገኘቱ ጨዋታው ተሰርዟል!** ገንዘብዎ ተመልሷል።`);
+                    await p.ctx.editMessageText(`⚠️ **በቂ ተጫዋች ባለመገኘቱ ጨዋታው ተሰርዟል! ገንዘብዎ ተመልሷል።**`);
                 } catch (e) {}
             }
             delete waitingRoom[cost];
@@ -435,14 +425,47 @@ bot.action(/keno_bet_(\d+)/, async (ctx) => {
     let user = await getOrCreateUser(userId);
 
     if (userId !== ADMIN_ID && user.balance < betAmount) {
-        return ctx.answerCbQuery(`❌ በቂ ባላንስ የለዎትም! (የመረጡት: ${betAmount} ብር)`, { show_alert: true });
+        return ctx.answerCbQuery(`❌ በቂ ባላንስ የለዎትም!`, { show_alert: true });
     }
 
     kenoSessions[userId] = { selectedNumbers: [], betAmount: betAmount };
 
     ctx.editMessageText(
-        `🎲 **ኬኖ ጨዋታ (የውርርድ መጠን: ${betAmount} ETB)**\n\nከ 1 እስከ 80 ካሉት ቁጥሮች **ከ 1 እስከ 10 ቁጥሮች** ይምረጡ (አሁን የተመረጡ: 0):\n\nአካውንት ባላንስ: **ETB ${user.balance.toFixed(2)}**`,
+        `🎲 **ኬኖ ጨዋታ (የውርርድ መጠን: ${betAmount} ETB)**\n\n` +
+        `ከ 1 እስከ 80 ካሉት ቁጥሮች **ከ 1 እስከ 10 ቁጥሮች** ይምረጡ (አሁን የተመረጡ: 0):\n\n` +
+        `💡 *ማሳሰቢያ:* ታማኝነትን ለመመልከት ከታች ያለውን **የሽልማት ሰንጠረዥ** መመልከት ይችላሉ።\n\n` +
+        `አካውንት ባላንስ: **ETB ${user.balance.toFixed(2)}**`,
         getKenoKeyboard([])
+    );
+});
+
+// የሽልማት ሰንጠረዥ (Payout Table) ለተጫዋቾች ታማኝነት ማሳያ
+bot.action('view_payout_table', (ctx) => {
+    ctx.answerCbQuery();
+    ctx.reply(
+        `📊 **የኬኖ ጨዋታ ኦፊሴላዊ የሽልማት ሰንጠረዥ (Payout Table)**\n\n` +
+        `• **10 ቁጥር መርጦ:**\n  - 10ቱንም ሲመታ = 50x እጥፍ\n` +
+        `• **9 ቁጥር መርጦ:**\n  - 9ቲቱንም ሲመታ = 20x እጥፍ\n` +
+        `• **8 ቁጥር መርጦ:**\n  - 8ቲቱንም ሲመታ = 10x እጥፍ\n` +
+        `• **7 ቁጥር መርጦ:**\n  - 7ቲቱንም ሲመታ = 5x እጥፍ\n` +
+        `• **6 ቁጥር መርጦ:**\n  - 6ቲቱንም ሲመታ = 3x እጥፍ\n` +
+        `• **5 ቁጥር መርጦ:**\n  - 5ቲቱንም ሲመታ = 2x እጥፍ\n` +
+        `• **ልዩ የሬፋንድ (Refund) ህግ:**\n` +
+        `  - 3 ወይም ከዚያ በታች ቁጥሮች መርጦ ቢያንስ 1 ቁጥር ሲደርስ (ዋና ሽልማት ባያገኝም) ያስያዘው ገንዘብ **100% ተመላሽ** ይደረግለታል!`,
+        Markup.inlineKeyboard([[Markup.button.callback('🔙 ወደ ኬኖ መጫወቻ ተመለስ', 'back_to_keno')]])
+    );
+});
+
+bot.action('back_to_keno', async (ctx) => {
+    const userId = ctx.from.id;
+    let session = kenoSessions[userId] || { selectedNumbers: [], betAmount: 10 };
+    let user = await getOrCreateUser(userId);
+
+    ctx.editMessageText(
+        `🎲 **ኬኖ ጨዋታ (የውርርድ መጠን: ${session.betAmount} ETB)**\n\n` +
+        `የመረጧቸው ቁጥሮች: [ **${session.selectedNumbers.sort((a,b)=>a-b).join(', ')}** ] (${session.selectedNumbers.length}/10)\n\n` +
+        `አካውንት ባላንስ: **ETB ${user.balance.toFixed(2)}**`,
+        getKenoKeyboard(session.selectedNumbers)
     );
 });
 
@@ -465,7 +488,9 @@ bot.action(/keno_num_(\d+)/, async (ctx) => {
 
     let user = await getOrCreateUser(userId);
     ctx.editMessageText(
-        `🎲 **ኬኖ ጨዋታ (የውርርድ መጠን: ${session.betAmount} ETB)**\n\nየመረጧቸው ቁጥሮች: [ **${session.selectedNumbers.sort((a,b)=>a-b).join(', ')}** ] (${session.selectedNumbers.length}/10)\n\nአካውንት ባላንስ: **ETB ${user.balance.toFixed(2)}**`,
+        `🎲 **ኬኖ ጨዋታ (የውርርድ መጠን: ${session.betAmount} ETB)**\n\n` +
+        `የመረጧቸው ቁጥሮች: [ **${session.selectedNumbers.sort((a,b)=>a-b).join(', ')}** ] (${session.selectedNumbers.length}/10)\n\n` +
+        `አካውንት ባላንስ: **ETB ${user.balance.toFixed(2)}**`,
         getKenoKeyboard(session.selectedNumbers)
     ).catch(()=>{});
 });
@@ -541,7 +566,6 @@ bot.action('start_keno_draw', async (ctx) => {
                 winAmount = betAmount * 1;
             }
 
-            // ኬኖ ላይ 2 ቁጥር መርጦ 1 ብቻ ሲደርሰው ወይም አሸናፊ ሳይሆን ሲቀር ውርርዱ ተመላሽ እንዲሆን
             let isRefund = false;
             if (winAmount === 0) {
                 if (session.selectedNumbers.length <= 3 && matchCount > 0) {
@@ -562,8 +586,8 @@ bot.action('start_keno_draw', async (ctx) => {
                 }
 
                 resultMsg = isRefund ? 
-                    `🔄 **ውርርዱ ተመላሽ ሆኗል!**\n\n🎯 የመረጧቸው: [ ${session.selectedNumbers.sort((a,b)=>a-b).join(', ')} ]\n✨ ትክክለኛ ግጥሚያዎች: ${matchCount} ቁጥር\n💰 ያስያዙት ገንዘብ (**ETB ${betAmount}**) ተመልሷል!\n\n💼 ባላንስዎ: **ETB ${user.balance.toFixed(2)}**` :
-                    `🎉 **እንኳን ደስ አሎት! አሸንፈዋል!** 🏆\n\n🎯 የመረጧቸው: [ ${session.selectedNumbers.sort((a,b)=>a-b).join(', ')} ]\n✨ ትክክለኛ ግጥሚያዎች: **${matchCount}** ቁጥር\n💰 ያሸነፉት ሽልማት: **ETB ${winAmount.toFixed(2)}**\n\n💼 ባላንስዎ: **ETB ${user.balance.toFixed(2)}**`;
+                    `🔄 **ውርርዱ ተመላሽ ሆኗል!**\n\n🎯 የመረጧቸው: [ ${session.selectedNumbers.sort((a,b)=>a-b).join(', ')} ]\n✨ ግጥሚያዎች: ${matchCount} ቁጥር\n💰 ያስያዙት ገንዘብ (**ETB ${betAmount}**) ተመልሷል!\n\n💼 ባላንስዎ: **ETB ${user.balance.toFixed(2)}**` :
+                    `🎉 **እንኳን ደስ አሎት! አሸንፈዋል!** 🏆\n\n🎯 የመረጧቸው: [ ${session.selectedNumbers.sort((a,b)=>a-b).join(', ')} ]\n✨ ግጥሚያዎች: **${matchCount}** ቁጥር\n💰 ያሸነፉት: **ETB ${winAmount.toFixed(2)}**\n\n💼 ባላንስዎ: **ETB ${user.balance.toFixed(2)}**`;
 
                 keyboardOptions = [
                     [Markup.button.callback('🎮 እንደገና ጫወት (Play Again)', 'select_keno')],
@@ -577,7 +601,7 @@ bot.action('start_keno_draw', async (ctx) => {
 
                 resultMsg = `❌ **አሳዛኝ ሁኔታ! ተሸንፈዋል!**\n\n` +
                     `🎯 የመረጧቸው: [ ${session.selectedNumbers.sort((a,b)=>a-b).join(', ')} ]\n` +
-                    `✨ ትክክለኛ ግጥሚያዎች: **${matchCount}** ቁጥር\n\n` +
+                    `✨ ግጥሚያዎች: **${matchCount}** ቁጥር\n\n` +
                     `💼 የቀረ ባላንስ: **ETB ${user.balance.toFixed(2)}**`;
 
                 keyboardOptions = [
@@ -611,7 +635,7 @@ bot.hears('💰 ዲፖዚት (Deposit)', async (ctx) => {
     }
 
     userSteps[userId] = { action: 'deposit_amount' };
-    ctx.reply(`${ADMIN_PAYMENT_INFO}\n💰 እባክዎ **ሊያስገቡት (ዲፖዚት ላደረጉት) የሚፈልጉትን የብር መጠን** ቁጥር ብቻ ይጻፉ (ለምሳሌ: 100):`);
+    ctx.reply(`${ADMIN_PAYMENT_INFO}\n💰 እባክዎ **ሊያስገቡት (ዲፖዚት ላደረጉት) የሚፈልጉትን የብር መጠን** ቁጥር ብቻ ይጻፉ:`);
 });
 
 bot.hears('💳 ዊዝድሮ (Withdraw)', async (ctx) => {
@@ -645,14 +669,14 @@ bot.hears('👤 ፕሮፋይል (Profile)', async (ctx) => {
 bot.hears('💬 ኮሜንት (Comment)', (ctx) => {
     const userId = ctx.from.id;
     userSteps[userId] = { action: 'comment_waiting' };
-    ctx.reply(`💬 ለአድሚን ማስተላለፍ የሚፈልጉትን **አስተያየት፣ ጥያቄ ወይም ስክሪንሾት ፎቶ** በአንድ ላይ ወይም በተናጠል ይላኩ፦`);
+    ctx.reply(`💬 ለአድሚን ማስተላለፍ የሚፈልጉትን **አስተያየት፣ ጥያቄ ወይም ስክሪንሾት ፎቶ** ይላኩ፦`);
 });
 
 bot.hears('📖 መመሪያ (Instructions)', (ctx) => {
     ctx.reply(
         `📖 **የጨዋታዎች አጨዋወት መመሪያ**\n\n` +
         `1. ዲፖዚት በመጫን ገንዘብ ገቢ በማድረግ ስክሪንሾት ፎቶ ይላኩ።\n` +
-        `2. ፕለይ የሚለውን በመጫን **ቢንጎ** (ከ 1-100 ቁጥር በመምረጥ) ወይም **ኬኖ** መጫወት ይችላሉ።`
+        `2. ፕለይ በመጫን **ቢንጎ** ወይም **ኬኖ** መጫወት ይችላሉ።`
     );
 });
 
@@ -660,7 +684,7 @@ bot.hears('📊 የአድሚን ባላንስ ማየት', async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     let users = await User.find();
     let totalCompanyBalance = users.reduce((sum, u) => sum + u.balance, 0);
-    ctx.reply(`📊 **የአድሚን ባላንስ እና ስታቲስቲክስ**\n\n👥 አጠቃላይ ተጫዋቾች: ${users.length} ሰው\n💰 የተጫዋቾች አጠቃላይ የባላንስ ድምር: ETB ${totalCompanyBalance.toFixed(2)}`, adminKeyboard);
+    ctx.reply(`📊 **የአድሚን ባላንስ እና ስታቲስቲክስ**\n\n👥 አጠቃላይ ተጫዋቾች: ${users.length} ሰው\n💰 የተጫዋቾች አጠቃላይ ባላንስ: ETB ${totalCompanyBalance.toFixed(2)}`, adminKeyboard);
 });
 
 bot.hears('👥 የተጫዋቾች ዝርዝር (Player List)', async (ctx) => {
@@ -680,7 +704,7 @@ bot.hears('📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', async (ctx) => {
     let reqs = await RequestModel.find();
     if (reqs.length === 0) return ctx.reply('📭 ምንም የሚጠብቅ ጥያቄ የለም።', adminKeyboard);
     for (let r of reqs) {
-        let msg = `📌 **አይነት:** ${r.type.toUpperCase()}\n👤 **ስም:** ${r.userName} (ID: \`${r.userId}\`)\n💰 **መጠን:** ETB ${r.amount}\n📱 **አካውንት/ስልክ:** \`${r.details}\`\n📅 **ቀን:** ${new Date(r.date).toLocaleString()}`;
+        let msg = `📌 **አይነት:** ${r.type.toUpperCase()}\n👤 **ስም:** ${r.userName} (ID: \`${r.userId}\`)\n💰 **መጠን:** ETB ${r.amount}\n📱 **አካውንት:** \`${r.details}\``;
         let keyboard = Markup.inlineKeyboard([
             [Markup.button.callback('✅ አጽድቅ', `approve_req_${r._id}`), Markup.button.callback('❌ ውድቅ አድርግ', `reject_req_${r._id}`)]
         ]);
@@ -700,7 +724,7 @@ bot.hears('💬 የተጫዋቾች ኮሜንቶች', async (ctx) => {
     for (let c of comments) {
         let replyStatus = c.adminReply ? `\n✅ **ምላሽ:** ${c.adminReply}` : `\n❌ ምላሽ አልተሰጠበትም`;
         let msg = `📌 **ከ:** ${c.userName} (ID: \`${c.userId}\`)\n💬 **መልእክት:** "${c.message}"${replyStatus}`;
-        let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ (በጽሑፍ/ፎቶ)', `reply_comment_${c._id}`)]]);
+        let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ', `reply_comment_${c._id}`)]]);
         
         if (c.photoId) {
             await ctx.replyWithPhoto(c.photoId, { caption: msg, parse_mode: 'Markdown', ...replyBtn });
@@ -737,7 +761,7 @@ bot.action(/ban_user_(\d+)/, async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     let targetUserId = parseInt(ctx.match[1]);
     await User.findOneAndDelete({ userId: targetUserId });
-    ctx.editMessageText(`✅ ዩዘር ID \`${targetUserId}\` ያለው ተጫዋች ከሲስተሙ ተወግዷል!`, { parse_mode: 'Markdown' });
+    ctx.editMessageText(`✅ ዩዘር ID \`${targetUserId}\` ያለው ተጫዋች ተወግዷል!`, { parse_mode: 'Markdown' });
 });
 
 bot.action(/cell_(\d+)_(\d+)/, async (ctx) => {
@@ -800,11 +824,11 @@ bot.action(/approve_req_(.+)/, async (ctx) => {
     if (req.type === 'deposit') {
         user.balance += req.amount;
         await user.save();
-        bot.telegram.sendMessage(req.userId, `🎉 **እንኳን ደስ አለዎት!** የ ETB ${req.amount} የዲፖዚት ጥያቄዎ በአድሚን ጸድቋል። ባላንስዎ ተሞልቷል! 💰`).catch(()=>{});
+        bot.telegram.sendMessage(req.userId, `🎉 የ ${req.amount} ETB የዲፖዚት ጥያቄዎ ጸድቋል! 💰`).catch(()=>{});
     }
 
     await RequestModel.findByIdAndDelete(reqId);
-    ctx.editMessageText(`✅ ጥያቄው ጸድቆ ተጠቃሚው ተሸልሟል/ባላንሱ ተስተካክሏል!`);
+    ctx.editMessageText(`✅ ጥያቄው ጸድቋል!`);
 });
 
 bot.action(/reject_req_(.+)/, async (ctx) => {
@@ -819,7 +843,7 @@ bot.action(/reject_req_(.+)/, async (ctx) => {
         await user.save();
     }
 
-    bot.telegram.sendMessage(req.userId, `❌ **አሳዛኝ ሁኔታ!** የ ${req.type.toUpperCase()} ጥያቄዎ በአድሚን ውድቅ ተደርጓል።`).catch(()=>{});
+    bot.telegram.sendMessage(req.userId, `❌ የ ${req.type.toUpperCase()} ጥያቄዎ ውድቅ ተደርጓል።`).catch(()=>{});
     await RequestModel.findByIdAndDelete(reqId);
     ctx.editMessageText(`❌ ጥያቄው ውድቅ ተደርጓል!`);
 });
@@ -829,7 +853,7 @@ bot.action(/reply_comment_(.+)/, async (ctx) => {
     let commentId = ctx.match[1];
     userSteps[ADMIN_ID] = { action: 'admin_reply_comment', commentId };
     ctx.answerCbQuery();
-    ctx.reply(`✍️ ለዚህ ኮሜንት የሚሰጡትን ምላሽ (ጽሑፍ እና/ወይም ፎቶ) አብረው ይላኩ፦`);
+    ctx.reply(`✍️ ለዚህ ኮሜንት የሚሰጡትን ምላሽ ይላኩ፦`);
 });
 
 bot.on('photo', async (ctx) => {
@@ -841,7 +865,7 @@ bot.on('photo', async (ctx) => {
 
     if (userId === ADMIN_ID && userSteps[ADMIN_ID] && userSteps[ADMIN_ID].action === 'admin_reply_comment') {
         let commentId = userSteps[ADMIN_ID].commentId;
-        let replyText = ctx.message.caption || 'ለጥያቄዎ የተሰጠ የምላሽ ፎቶ';
+        let replyText = ctx.message.caption || 'ምላሽ';
         delete userSteps[ADMIN_ID];
 
         let comment = await CommentModel.findById(commentId);
@@ -856,21 +880,19 @@ bot.on('photo', async (ctx) => {
             parse_mode: 'Markdown'
         }).catch(()=>{});
 
-        return ctx.reply(`✅ የምላሽ ፎቶ እና መልእክት ለተጠቃሚው በተሳካ ሁኔታ ተልኳል!`);
+        return ctx.reply(`✅ የምላሽ ፎቶ ተልኳል!`);
     }
 
     if (userSteps[userId] && userSteps[userId].action === 'comment_waiting') {
-        let messageText = ctx.message.caption || 'ስክሪንሾት/ፎቶ ጥያቄ';
+        let messageText = ctx.message.caption || 'ፎቶ';
         delete userSteps[userId];
 
         let newComment = new CommentModel({ userId, userName, message: messageText, photoId });
         await newComment.save();
 
-        ctx.reply(`✅ ፎቶዎ እና መልእክትዎ ለአድሚን ተልኳል! እናመሰግናለን።`, mainKeyboard);
-
-        let adminMsg = `📌 **አዲስ የኮሜንት/ጥያቄ ፎቶ መጣ!**\n\n👤 **ከ:** ${userName} (ID: \`${userId}\`)\n💬 **መልእክት:** "${messageText}"`;
-        let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ (በጽሑፍ/ፎቶ)', `reply_comment_${newComment._id}`)]]);
-        
+        ctx.reply(`✅ ፎቶዎ ለአድሚን ተልኳል!`, mainKeyboard);
+        let adminMsg = `📌 **አዲስ የኮሜንት ፎቶ መጣ!**\n\n👤 **ከ:** ${userName} (ID: \`${userId}\`)`;
+        let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ', `reply_comment_${newComment._id}`)]]);
         return bot.telegram.sendPhoto(ADMIN_ID, photoId, { caption: adminMsg, parse_mode: 'Markdown', ...replyBtn }).catch(()=>{});
     }
 
@@ -881,7 +903,7 @@ bot.on('photo', async (ctx) => {
         let existingRequest = await RequestModel.findOne({ photoUniqueId });
         if (existingRequest) {
             delete userSteps[userId];
-            return ctx.reply(`❌ **ስህተት!** ይህ የክፍያ ስክሪንሾት ከዚህ በፊት ጥቅም ላይ ውሏል/ተልኳል።`);
+            return ctx.reply(`❌ ይህ ስክሪንሾት ከዚህ በፊት ጥቅም ላይ ውሏል!`);
         }
 
         delete userSteps[userId];
@@ -892,9 +914,9 @@ bot.on('photo', async (ctx) => {
         });
         await newReq.save();
 
-        ctx.reply(`⏳ **የዲፖዚት ጥያቄዎ ደርሷል!** አድሚን አረጋግጦ እስኪልክልዎ ድረስ ይጠብቁ።`);
+        ctx.reply(`⏳ የዲፖዚት ጥያቄዎ ደርሷል! እባክዎ ይጠብቁ።`);
 
-        let adminMsg = `📥 **አዲስ የዲፖዚት ጥያቄ መጣ!**\n\n👤 **ስም:** ${userName} (ID: \`${userId}\`)\n💰 **መጠን:** ETB ${amount}`;
+        let adminMsg = `📥 **አዲስ የዲፖዚት ጥያቄ!**\n\n👤 **ስም:** ${userName} (ID: \`${userId}\`)\n💰 **መጠን:** ETB ${amount}`;
         let adminKeyboard = Markup.inlineKeyboard([
             [Markup.button.callback('✅ አጽድቅ', `approve_req_${newReq._id}`), Markup.button.callback('❌ ውድቅ አድርግ', `reject_req_${newReq._id}`)]
         ]);
@@ -911,7 +933,7 @@ bot.on('text', async (ctx) => {
         let step = userSteps[ADMIN_ID];
         if (step.action === 'admin_deposit_id') {
             userSteps[ADMIN_ID] = { action: 'admin_deposit_amount', targetId: parseInt(text) };
-            return ctx.reply(`💵 የተጫዋች ID ተይዟል። ሊያስገቡለት የሚፈልጉትን የብር መጠን ያስገቡ:`);
+            return ctx.reply(`💵 የብር መጠን ያስገቡ:`);
         } else if (step.action === 'admin_deposit_amount') {
             let targetUser = await getOrCreateUser(step.targetId);
             targetUser.balance += parseFloat(text);
@@ -930,7 +952,7 @@ bot.on('text', async (ctx) => {
             await comment.save();
 
             await bot.telegram.sendMessage(comment.userId, `📥 **ከአድሚን የተሰጠ ምላሽ:**\n\n${text}`).catch(()=>{});
-            return ctx.reply(`✅ የምላሽ መልእክት ለተጠቃሚው ተልኳል!`);
+            return ctx.reply(`✅ መልእክቱ ተልኳል!`);
         }
     }
 
@@ -939,10 +961,10 @@ bot.on('text', async (ctx) => {
         
         if (stepInfo.action === 'deposit_amount') {
             const amount = parseFloat(text.match(/[\d.]+/)?.[0] || 0);
-            if (amount <= 0) return ctx.reply(`❌ እባክዎ ትክክለኛ የብር መጠን ያስገቡ።`);
+            if (amount <= 0) return ctx.reply(`❌ ትክክለኛ የብር መጠን ያስገቡ።`);
             
             userSteps[userId] = { action: 'deposit_screenshot', amount };
-            return ctx.reply(`📸 እናመሰግናለን! አሁን እባክዎ **የተላከበትን የክፍያ ስክሪንሾት (Screenshot) ፎቶ** በዚህ ቦት ላይ ይላኩልን:`);
+            return ctx.reply(`📸 እባክዎ **የክፍያ ስክሪንሾት (Screenshot)** ፎቶ ይላኩልን:`);
         }
 
         if (stepInfo.action === 'withdraw_amount') {
@@ -965,12 +987,12 @@ bot.on('text', async (ctx) => {
             
             ctx.reply(`✅ አስተያየትዎ ለአድሚን ተልኳል!`, mainKeyboard);
             
-            let adminMsg = `📌 **አዲስ የኮሜንት/ጥያቄ መጣ!**\n\n👤 **ከ:** ${ctx.from.first_name} (ID: \`${userId}\`)\n💬 **መልእክት:** "${text}"`;
-            let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ (በጽሑፍ/ፎቶ)', `reply_comment_${newComment._id}`)]]);
+            let adminMsg = `📌 **አዲስ ኮሜንት!**\n\n👤 **ከ:** ${ctx.from.first_name} (ID: \`${userId}\`)\n💬 "${text}"`;
+            let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ', `reply_comment_${newComment._id}`)]]);
             return bot.telegram.sendMessage(ADMIN_ID, adminMsg, { parse_mode: 'Markdown', ...replyBtn }).catch(()=>{});
         }
     }
 });
 
 bot.launch();
-console.log('🤖 Efuye Bingo & Keno Ultimate Bot is running successfully with 1-100 Taken Bingo Board & Keno Refund!');
+console.log('🤖 Bot is running with Keno Payout Table & Bingo 1-100 Taken Board!');
