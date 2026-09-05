@@ -122,7 +122,7 @@ function getKenoKeyboard(selectedNumbers = [], betAmount = 10) {
     return Markup.inlineKeyboard(keyboard);
 }
 
-// የኬኖ ሁኔታ (አጠቃላይ የሚገኘው ገንዘብ: ያስያዙት + (ያስያዙት * ማባዣ) ሆኖ ከነጥብ ነጻ ተደርጓል)
+// የኬኖ ሁኔታ (የተስተካከለ የሂሳብ ስሌት)
 function getKenoStatusText(selectedNumbers, betAmount, userBalance) {
     let count = selectedNumbers.length;
     let multiplier = 0;
@@ -466,13 +466,14 @@ bot.action(/keno_bet_(\d+)/, async (ctx) => {
     ctx.editMessageText(textMsg, getKenoKeyboard([], betAmount));
 });
 
-// የሽልማት ሰንጠረዥ (Payout Table) ማሳያ
+// የሽልማት ሰንጠረዥ (Payout Table) ማሳያ (የተስተካከለ)
 bot.action('view_payout_table', (ctx) => {
     ctx.answerCbQuery();
     ctx.reply(
         `📊 **የኬኖ ጨዋታ ኦፊሴላዊ የሽልማት ሰንጠረዥ (Payout Table)**\n\n` +
+        `• **2 ቁጥር መርጦ 1 ሲመታ:** ያስያዙት ገንዘብ ተመላሽ (Refund)\n` +
         `• **3 ቁጥር መርጦ 2 ሲመታ:** ሽልማት አለው (Partial Win)\n` +
-        `• **3 ቁጥር መርጦ 1 ሲመታ:** ያስያዙት ገንዘብ ተመላሽ (Refund)\n\n` +
+        `• **4 ቁጥር መርጦ 2 ሲመታ:** ትንሽ ሽልማት አለው (Partial Win)\n\n` +
         `• **1 ቁጥር መርጦ:** 0.2x\n` +
         `• **2 ቁጥር መርጦ:** 0.3x\n` +
         `• **3 ቁጥር መርጦ:** 0.5x\n` +
@@ -576,7 +577,7 @@ bot.action('start_keno_draw', async (ctx) => {
             let isRefund = false;
             let selectedCount = session.selectedNumbers.length;
 
-            // --- አዲሱ የዊን/ተመላሽ ሎጂክ እዚህ ተጨምሯል ---
+            // --- የተስተካከለ የዊን/ተመላሽ ሎጂክ ---
             if (matchCount === selectedCount) {
                 // ሙሉ ሲመታ (Full Win)
                 let multiplier = 0;
@@ -593,13 +594,18 @@ bot.action('start_keno_draw', async (ctx) => {
 
                 winAmount = Math.round(betAmount + (betAmount * multiplier));
             } 
+            else if (selectedCount === 4 && matchCount === 2) {
+                // 4 ቁጥር መርጦ 2 ሲመታ (በትንሽ ፖይንት ማባዣ ሽልማት - 0.2x)
+                let multiplier = 0.2; 
+                winAmount = Math.round(betAmount + (betAmount * multiplier));
+            }
             else if (selectedCount === 3 && matchCount === 2) {
-                // 3 ቁጥር መርጦ 2 ሲመታ (Partial Win - ለምሳሌ የውርርዱን 1.5 እጥፍ)
+                // 3 ቁጥር መርጦ 2 ሲመታ (Partial Win)
                 let multiplier = 0.5; 
                 winAmount = Math.round(betAmount + (betAmount * multiplier));
             }
-            else if (matchCount === 1) {
-                // ከሶስቱ ወይም ከመርጠዋቸው ውስጥ 1 ብቻ ከገጠመ ያስያዘው ገንዘብ ተመላሽ (Refund)
+            else if (selectedCount === 2 && matchCount === 1) {
+                // 2 ቁጥር መርጦ 1 ሲመታ (ገንዘብ ተመላሽ / Refund)
                 isRefund = true;
                 winAmount = betAmount;
             }
@@ -1037,4 +1043,4 @@ bot.on('text', async (ctx) => {
 });
 
 bot.launch();
-console.log('🤖 Bot is running with Updated Keno Partial Win & Refund Rules!');
+console.log('🤖 Bot is running with Fully Corrected Keno Refund & Partial Win Rules!');
