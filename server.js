@@ -9,7 +9,6 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static('public'));
 
-// --- 1. የሞንጎዲቢ ግንኙነት (MongoDB Connection) ---
 const MONGO_URI = process.env.MONGO_URI;
 
 if (!MONGO_URI) {
@@ -25,7 +24,6 @@ mongoose.connect(MONGO_URI)
     process.exit(1);
 });
 
-// --- 2. ዳታቤዝ ስኬማዎች (Schemas) ---
 const userSchema = new mongoose.Schema({
     userId: { type: Number, required: true, unique: true },
     userName: { type: String },
@@ -68,7 +66,6 @@ const takenNumberSchema = new mongoose.Schema({
 });
 const TakenNumber = mongoose.model('TakenNumber', takenNumberSchema);
 
-// --- 3. ቦት እና አድሚን ማዋቀር ---
 const TOKEN = process.env.BOT_TOKEN;
 if (!TOKEN) {
     console.error('❌ BOT_TOKEN is not defined!');
@@ -102,7 +99,6 @@ app.get('/', (req, res) => {
   res.send('Efuye Bingo & Keno Ultimate Bot Server is running!');
 });
 
-// --- API Endpoints ለ ቴሌግራም ሚኒ አፕ (Mini App) ---
 app.get('/api/user/:userId', async (req, res) => {
     try {
         const user = await getOrCreateUser(parseInt(req.params.userId));
@@ -112,20 +108,19 @@ app.get('/api/user/:userId', async (req, res) => {
     }
 });
 
+// የኬኖ ማባዣ ስሌት (ለሁሉም ተጫዋቾች - አድሚንን ጨምሮ ከባላንስ ጋር እንዲሰራ የተስተካከለ)
 app.post('/api/play/keno', async (req, res) => {
     try {
         const { userId, selectedNumbers, betAmount } = req.body;
         let user = await getOrCreateUser(userId);
 
-        if (userId !== ADMIN_ID && user.balance < betAmount) {
+        if (user.balance < betAmount) {
             return res.json({ success: false, message: 'በቂ ባላንስ የለዎትም!' });
         }
 
-        if (userId !== ADMIN_ID) {
-            user.balance -= betAmount;
-            user.totalGames += 1;
-            await user.save();
-        }
+        user.balance -= betAmount;
+        user.totalGames += 1;
+        await user.save();
 
         let allNums = Array.from({length: 80}, (_, i) => i + 1);
         let drawnNumbers = [];
@@ -167,19 +162,15 @@ app.post('/api/play/keno', async (req, res) => {
         }
 
         if (winAmount > 0) {
-            if (userId !== ADMIN_ID) {
-                user.balance += winAmount;
-                if (!isRefund) {
-                    user.wins += 1;
-                    user.level += 1;
-                }
-                await user.save();
+            user.balance += winAmount;
+            if (!isRefund) {
+                user.wins += 1;
+                user.level += 1;
             }
+            await user.save();
         } else {
-            if (userId !== ADMIN_ID) {
-                user.losses += 1;
-                await user.save();
-            }
+            user.losses += 1;
+            await user.save();
         }
 
         res.json({ success: true, drawnNumbers, matchCount, winAmount, isRefund, newBalance: user.balance });
@@ -193,15 +184,13 @@ app.post('/api/play/bingo', async (req, res) => {
         const { userId, betAmount } = req.body;
         let user = await getOrCreateUser(userId);
 
-        if (userId !== ADMIN_ID && user.balance < betAmount) {
+        if (user.balance < betAmount) {
             return res.json({ success: false, message: '⚠️ በቂ የኪስ ቦርሳ ሂሳብ የለዎትም!' });
         }
 
-        if (userId !== ADMIN_ID) {
-            user.balance -= betAmount;
-            user.totalGames += 1;
-            await user.save();
-        }
+        user.balance -= betAmount;
+        user.totalGames += 1;
+        await user.save();
 
         res.json({ success: true, newBalance: user.balance, message: 'ውርርዱ ተሳክቷል!' });
     } catch (e) {
@@ -235,7 +224,6 @@ app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
 
-// የኬኖ ኪቦርድ ማመንጫ
 function getKenoKeyboard(selectedNumbers = [], betAmount = 10) {
     let keyboard = [];
     let row = [];
@@ -282,7 +270,6 @@ function getKenoStatusText(selectedNumbers, betAmount, userBalance) {
 async function getBingo1to100Keyboard() {
     let keyboard = [];
     let row = [];
-    
     let takenDocs = await TakenNumber.find({});
     let takenMap = {};
     takenDocs.forEach(doc => { takenMap[doc.number] = true; });
@@ -293,7 +280,6 @@ async function getBingo1to100Keyboard() {
         } else {
             row.push(Markup.button.callback(`${i}`, `b_pick_${i}`));
         }
-
         if (row.length === 10) {
             keyboard.push(row);
             row = [];
@@ -309,7 +295,6 @@ function generateRandomBingoCard() {
         let rand = Math.floor(Math.random() * 100) + 1;
         if (!numbers.includes(rand)) numbers.push(rand);
     }
-    
     let matrix = [];
     let idx = 0;
     for (let r = 0; r < 5; r++) {
@@ -483,16 +468,14 @@ bot.action(/b_pick_(\d+)/, async (ctx) => {
         let user = await getOrCreateUser(userId);
         let cost = 10; 
 
-        if (userId !== ADMIN_ID && user.balance < cost) {
+        if (user.balance < cost) {
             await TakenNumber.findOneAndDelete({ number: num });
             return ctx.answerCbQuery('❌ በቂ ባላንስ የለዎትም!', { show_alert: true });
         }
 
-        if (userId !== ADMIN_ID) {
-            user.balance -= cost;
-            user.totalGames += 1;
-            await user.save();
-        }
+        user.balance -= cost;
+        user.totalGames += 1;
+        await user.save();
 
         let matrix = generateRandomBingoCard();
         if (!waitingRoom[cost]) waitingRoom[cost] = [];
@@ -518,13 +501,10 @@ function runBingoQueue(cost) {
         if (room.length < 2) {
             for (let p of room) {
                 await TakenNumber.findOneAndDelete({ number: p.pickedNumber });
-
-                if (p.userId !== ADMIN_ID) {
-                    let pUser = await getOrCreateUser(p.userId);
-                    pUser.balance += p.cost; 
-                    pUser.totalGames -= 1;
-                    await pUser.save();
-                }
+                let pUser = await getOrCreateUser(p.userId);
+                pUser.balance += p.cost; 
+                pUser.totalGames -= 1;
+                await pUser.save();
                 try {
                     await p.ctx.editMessageText(`⚠️ **በቂ ተጫዋች ባለመገኘቱ ጨዋታው ተሰርዟል! ገንዘብዎ ተመልሷል።**`);
                 } catch (e) {}
@@ -606,7 +586,7 @@ bot.action(/keno_bet_(\d+)/, async (ctx) => {
     const betAmount = parseInt(ctx.match[1]);
     let user = await getOrCreateUser(userId);
 
-    if (userId !== ADMIN_ID && user.balance < betAmount) {
+    if (user.balance < betAmount) {
         return ctx.answerCbQuery(`❌ በቂ ባላንስ የለዎትም!`, { show_alert: true });
     }
 
@@ -669,15 +649,13 @@ bot.action('start_keno_draw', async (ctx) => {
     let user = await getOrCreateUser(userId);
     let betAmount = session.betAmount;
 
-    if (userId !== ADMIN_ID && user.balance < betAmount) {
+    if (user.balance < betAmount) {
         return ctx.answerCbQuery('❌ በቂ ባላንስ የለዎትም!', { show_alert: true });
     }
 
-    if (userId !== ADMIN_ID) {
-        user.balance -= betAmount;
-        user.totalGames += 1;
-        await user.save();
-    }
+    user.balance -= betAmount;
+    user.totalGames += 1;
+    await user.save();
 
     await ctx.answerCbQuery('🎲 የኬኖ ጨዋታ ተጀምሯል! ቁጥሮች በየ 3 ሰከንድ ይወጣሉ...');
 
@@ -746,14 +724,12 @@ bot.action('start_keno_draw', async (ctx) => {
             let keyboardOptions = [];
 
             if (winAmount > 0) {
-                if (userId !== ADMIN_ID) {
-                    user.balance += winAmount;
-                    if (!isRefund) {
-                        user.wins += 1;
-                        user.level += 1;
-                    }
-                    await user.save();
+                user.balance += winAmount;
+                if (!isRefund) {
+                    user.wins += 1;
+                    user.level += 1;
                 }
+                await user.save();
 
                 if (isRefund) {
                     resultMsg = `🔄 **ገንዘብዎ ተመልሷል (Refund)!**\n\n` +
@@ -774,10 +750,8 @@ bot.action('start_keno_draw', async (ctx) => {
                     [Markup.button.callback('🔙 ወደ ዋናው ሜኑ', 'back_to_main_menu')]
                 ];
             } else {
-                if (userId !== ADMIN_ID) {
-                    user.losses += 1;
-                    await user.save();
-                }
+                user.losses += 1;
+                await user.save();
 
                 resultMsg = `❌ **አሳዛኝ ሁኔታ! ተሸንፈዋል!**\n\n` +
                     `🎯 የመረጧቸው: [ ${session.selectedNumbers.sort((a,b)=>a-b).join(', ')} ]\n` +
@@ -806,14 +780,12 @@ bot.action('back_to_main_menu', (ctx) => {
 bot.hears('💰 ዲፖዚት (Deposit)', async (ctx) => {
     const userId = ctx.from.id;
     let user = await getOrCreateUser(userId);
-    
     if (!user.phone) {
         return ctx.reply(
             `⚠️ ዲፖዚት ከማድረግዎ በፊት ስልክ ቁጥርዎ ማጋራት አለብዎት።`,
             Markup.keyboard([[Markup.button.contactRequest('📱 ስልክ ቁጥር አጋራ (Share Contact)')]]).resize()
         );
     }
-
     userSteps[userId] = { action: 'deposit_amount' };
     ctx.reply(`${ADMIN_PAYMENT_INFO}\n💰 እባክዎ **ሊያስገቡት (ዲፖዚት ላደረጉት) የሚፈልጉትን የብር መጠን** ቁጥር ብቻ ይጻፉ:`);
 });
@@ -1175,4 +1147,4 @@ bot.on('text', async (ctx) => {
 });
 
 bot.launch();
-console.log('🤖 Bot is running successfully!');
+console.log('🤖 Bot is running with Fully Fixed Multiplier & Balance for All Users!');
