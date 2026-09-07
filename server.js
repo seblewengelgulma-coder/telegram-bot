@@ -77,7 +77,7 @@ if (!TOKEN) {
 }
 
 // 🌐 የቴሌግራም ሚኒ አፕ (Mini App) ዌብ አድራሻ (ትክክለኛው የሬንደር ዩአርኤል ያለ /miniapp)
-const WEBAPP_URL = process.env.WEBAPP_URL || 'https://telegram-bot-xer2.onrender.com';
+const WEBAPP_URL = process.env.WEBAPP_URL || 'https://telegram-bot-xer2.onrender.com](https://telegram-bot-xer2.onrender.com';
 
 const bot = new Telegraf(TOKEN);
 const ADMIN_ID = 380035906;
