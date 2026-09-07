@@ -38,13 +38,12 @@
         /* Bingo Game Styles */
         .bingo-lobby { background: #0f172a; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 15px; border: 1px solid #334155; }
         
-        /* የተስተካከለ የቢንጎ ቁጥሮች ማሳያ (በየ 10ቱ ወደ ታች እንዲወርድ የተደረገ) */
+        /* የቢንጎ ቁጥሮች ታሪክ ማሳያ (በየ 10ቱ ወደ ታች እንዲወርድ የተደረገ) */
         .called-history-box { background: #0f172a; color: #fff; padding: 12px; border-radius: 8px; margin-bottom: 12px; min-height: 50px; font-size: 15px; font-weight: bold; line-height: 1.6; text-align: left; border: 1px solid #334155; }
         
         .bingo-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; max-width: 320px; margin: 15px auto; }
         .bingo-cell { background: #334155; border: 1px solid #475569; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-weight: bold; border-radius: 6px; cursor: pointer; font-size: 14px; color: #fff; transition: 0.2s; }
         .bingo-cell.marked { background: #16a34a; color: white; border-color: #22c55e; }
-        .bingo-cell.called-hit { border: 2px dashed #facc15; }
         .bingo-header-cell { background: #1e293b; color: #38bdf8; font-weight: bold; border: none; font-size: 15px; }
 
         /* General Buttons & Forms */
@@ -121,7 +120,7 @@
             </div>
 
             <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">ያለፉት የተጠሩ ቁጥሮች ታሪክ (በ 10 እያደረገ ወደ ታች):</div>
-            <!-- የተስተካከለ የወጡ ቁጥሮች ማሳያ ቦክስ -->
+            <!-- የወጡ ቁጥሮች ማሳያ ቦክስ -->
             <div class="called-history-box" id="called-history-box">
                 📢 የወጡ ቁጥሮች እዚህ ይታያሉ...
             </div>
@@ -171,7 +170,7 @@
         const tg = window.Telegram.WebApp;
         tg.expand();
 
-        // 1. የተስተካከለ ዩዘር ID ማግኛ (ለሁሉም ተጫዋቾች በትክክል እንዲሰራ)
+        // ዩዘር ID ማግኛ (ለሁሉም ተጫዋቾች በትክክል እንዲሰራ)
         const tgUser = tg.initDataUnsafe?.user;
         const userId = tgUser ? tgUser.id : 380035906; // ተጫዋቹ ከሌለ ወይም ዌብ ላይ ሲከፈት ለአድሚን በነባሪ ይሰራል
         const userName = tgUser ? (tgUser.first_name || 'ተጫዋች') : 'ተጫዋች';
@@ -303,7 +302,7 @@
             }, 3000);
         }
 
-        // --- BINGO FIXED LOBBY & GAME FLOW ---
+        // --- BINGO LOBBY & GAME FLOW ---
         let bingoCells = [];
         let calledNumbers = [];
         let bingoInterval = null;
@@ -398,13 +397,10 @@
                         cellDiv.innerText = num;
                         let cellData = { number: num, marked: false, isFree: false, element: cellDiv };
                         
+                        // ተጫዋቹ በራሱ ፈልጎ ሲነካው ብቻ እንዲሞላ (marked) የተደረገበት ክፍል
                         cellDiv.onclick = () => {
-                            if(calledNumbers.includes(num)) {
-                                cellData.marked = !cellData.marked;
-                                cellDiv.classList.toggle('marked');
-                            } else {
-                                alert(`⚠️ ቁጥር ${num} ገና አልተጠራም!`);
-                            }
+                            cellData.marked = !cellData.marked;
+                            cellDiv.classList.toggle('marked');
                         };
                         row.push(cellData);
                     }
@@ -430,22 +426,16 @@
                     let currentNum = allPool[callIndex];
                     calledNumbers.push(currentNum);
 
-                    // --- የተስተካከለ የቁጥሮች ታሪክ ማሳያ (በየ 10ቱ ወደ ታች እንዲወርድ) ---
+                    // የቁጥሮች ታሪክ በየ 10ቱ ወደ ታች እንዲወርድ ማድረግ
                     let formattedRows = [];
                     for (let i = 0; i < calledNumbers.length; i += 10) {
                         let chunk = calledNumbers.slice(i, i + 10).join(', ');
                         formattedRows.push(chunk);
                     }
                     historyBox.innerHTML = `🟢 <b>የወጡ ቁጥሮች ታሪክ:</b><br>` + formattedRows.join('<br>');
-                    // ----------------------------------------------------
+                    
+                    // (ማስታወሻ: ተጫዋቹ እራሱ ፈልጎ እንዲያገኝ ሰርቨሩ በካርቴላው ላይ ምንም አይነት አውቶማቲክ ምልክት (called-hit) አያሳይም)
 
-                    for(let r=0; r<5; r++) {
-                        for(let c=0; c<5; c++) {
-                            if(bingoCells[r][c].number === currentNum) {
-                                bingoCells[r][c].element.classList.add('called-hit');
-                            }
-                        }
-                    }
                     callIndex++;
                 } else {
                     clearInterval(bingoInterval);
