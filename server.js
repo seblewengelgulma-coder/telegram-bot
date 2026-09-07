@@ -76,8 +76,8 @@ if (!TOKEN) {
     process.exit(1);
 }
 
-// 🌐 የቴሌግራም ሚኒ አፕ (Mini App) ዌብ አድራሻ ከ Render Environment Variable የሚነበብበት
-const WEBAPP_URL = process.env.WEBAPP_URL || 'https://telegram-bot-xer2.onrender.com/miniapp';
+// 🌐 የቴሌግራም ሚኒ አፕ (Mini App) ዌብ አድራሻ (ትክክለኛው የሬንደር ዩአርኤል ያለ /miniapp)
+const WEBAPP_URL = process.env.WEBAPP_URL || 'https://telegram-bot-xer2.onrender.com';
 
 const bot = new Telegraf(TOKEN);
 const ADMIN_ID = 380035906;
@@ -385,12 +385,12 @@ bot.on('contact', async (ctx) => {
     ctx.reply(`✅ ስልክ ቁጥርዎ በተሳካ ሁኔታ ተመዝግቧል!`, mainKeyboard);
 });
 
-// --- ቴሌግራም ሚኒ አፕ (Mini App) መክፈቻ ቁልፎች (ለተጫዋች እና ለአድሚን) ---
+// --- ቴሌግራም ሚኒ አፕ (Mini App) መክፈቻ ቁልፎች (በትክክለኛው WEBAPP_URL) ---
 bot.hears('🚀 ሚኒ አፕ (Mini App) 🎮', (ctx) => {
     ctx.reply(
         `🚀 **እፉዬ ቴሌግራም ሚኒ አፕ ጨዋታዎች**\n\nበምቾት እና በፍጥነት በድር መተግበሪያ (Mini App) ለመጫወት ከታች ያለውን ቁልፍ ይጫኑ፡`,
         Markup.inlineKeyboard([
-            [Markup.button.webApp('🎮 ሚኒ አፕ (Mini App) ክፈት', `${WEBAPP_URL}`)]
+            [Markup.button.webApp('🎮 ሚኒ አፕ (Mini App) ክፈት', WEBAPP_URL)]
         ])
     );
 });
@@ -400,7 +400,7 @@ bot.hears('🚀 አድሚን ሚኒ አፕ (Admin Mini App)', (ctx) => {
     ctx.reply(
         `👑 **የአድሚን ሚኒ አፕ ፓነል**\n\nሚኒ አፕ ፕላትፎርሙን ለመክፈት ከታች ያለውን ቁልፍ ይጫኑ፡`,
         Markup.inlineKeyboard([
-            [Markup.button.webApp('👑 አድሚን ሚኒ አፕ ክፈት', `${WEBAPP_URL}`)]
+            [Markup.button.webApp('👑 አድሚን ሚኒ አፕ ክፈት', WEBAPP_URL)]
         ])
     );
 });
@@ -411,7 +411,7 @@ bot.hears('🎮 ፕለይ (Play)', (ctx) => {
         Markup.inlineKeyboard([
             [Markup.button.callback('🎯 ቢንጎ ጨዋታ (Bingo)', 'select_bingo_main')],
             [Markup.button.callback('🎲 ኬኖ ጨዋታ (Keno)', 'select_keno')],
-            [Markup.button.webApp('🚀 ሚኒ አፕ (Mini App) ጨዋታ', `${WEBAPP_URL}`)]
+            [Markup.button.webApp('🚀 ሚኒ አፕ (Mini App) ጨዋታ', WEBAPP_URL)]
         ])
     );
 });
@@ -841,8 +841,8 @@ bot.hears('💬 ኮሜንት (Comment)', (ctx) => {
 bot.hears('📖 መመሪያ (Instructions)', (ctx) => {
     ctx.reply(
         `📖 **የጨዋታዎች አጨዋወት መመሪያ**\n\n` +
-        `1. ዲፖዚት በመጫን ገንዘብ ገቢ በማድረግ ስክሪንሾት ፎቶ ይላኩ።\n` +
-        `2. ፕለይ በመጫን **ቢንጎ** ወይም **ኬኖ** መጫወት ይችላሉ።`
+        `1. ዲፖዚት በመጫን ገንዘብ ገቢ በማድረግ ስክሪንሾት ፎቶ ይላቋል።\n` +
+        `2. ፕለይ በመጫን ወይም ሚኒ አፕ በመክፈት **ቢንጎ** ወይም **ኬኖ** መጫወት ይችላሉ።`
     );
 });
 
