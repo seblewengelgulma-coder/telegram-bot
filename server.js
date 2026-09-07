@@ -76,7 +76,6 @@ if (!TOKEN) {
     process.exit(1);
 }
 
-// 🌐 የቴሌግራም ሚኒ አፕ (Mini App) ዌብ አድራሻ ከ Render Environment Variable የሚነበብበት
 const WEBAPP_URL = process.env.WEBAPP_URL || 'https://your-render-app-url.onrender.com';
 
 const bot = new Telegraf(TOKEN);
@@ -104,7 +103,7 @@ app.get('/', (req, res) => {
   res.send('Efuye Bingo & Keno Ultimate Bot Server is running!');
 });
 
-// --- API Endpoints ለ ቴሌግራም ሚኒ አፕ (Mini App) ጨዋታዎች ማስተናገጃ ---
+// --- API Endpoints ለ ቴሌግራም ሚኒ አፕ (Mini App) ---
 app.get('/api/user/:userId', async (req, res) => {
     try {
         const user = await getOrCreateUser(parseInt(req.params.userId));
@@ -114,7 +113,6 @@ app.get('/api/user/:userId', async (req, res) => {
     }
 });
 
-// የኬኖ ጨዋታ ውጤት ማስላት እና ባላንስ ማስተካከል API
 app.post('/api/play/keno', async (req, res) => {
     try {
         const { userId, selectedNumbers, betAmount } = req.body;
@@ -145,16 +143,16 @@ app.post('/api/play/keno', async (req, res) => {
 
         if (matchCount === selectedCount) {
             let multiplier = 0;
-            if (selectedCount === 10) { multiplier = 20; }
-            else if (selectedCount === 9) { multiplier = 10; }
-            else if (selectedCount === 8) { multiplier = 6; }
-            else if (selectedCount === 7) { multiplier = 3.5; }
-            else if (selectedCount === 6) { multiplier = 2; }
-            else if (selectedCount === 5) { multiplier = 1.2; }
-            else if (selectedCount === 4) { multiplier = 0.8; }
-            else if (selectedCount === 3) { multiplier = 0.5; }
-            else if (selectedCount === 2) { multiplier = 0.3; }
-            else if (selectedCount === 1) { multiplier = 0.2; }
+            if (selectedCount === 10) multiplier = 20;
+            else if (selectedCount === 9) multiplier = 10;
+            else if (selectedCount === 8) multiplier = 6;
+            else if (selectedCount === 7) multiplier = 3.5;
+            else if (selectedCount === 6) multiplier = 2;
+            else if (selectedCount === 5) multiplier = 1.2;
+            else if (selectedCount === 4) multiplier = 0.8;
+            else if (selectedCount === 3) multiplier = 0.5;
+            else if (selectedCount === 2) multiplier = 0.3;
+            else if (selectedCount === 1) multiplier = 0.2;
 
             winAmount = Math.round(betAmount + (betAmount * multiplier));
         } 
@@ -185,20 +183,12 @@ app.post('/api/play/keno', async (req, res) => {
             }
         }
 
-        res.json({
-            success: true,
-            drawnNumbers,
-            matchCount,
-            winAmount,
-            isRefund,
-            newBalance: user.balance
-        });
+        res.json({ success: true, drawnNumbers, matchCount, winAmount, isRefund, newBalance: user.balance });
     } catch (e) {
         res.status(500).json({ error: 'Server error' });
     }
 });
 
-// የቢንጎ ጨዋታ የውርርድ API ለ ሚኒ አፕ (Mini App)
 app.post('/api/play/bingo', async (req, res) => {
     try {
         const { userId, betAmount } = req.body;
@@ -214,17 +204,12 @@ app.post('/api/play/bingo', async (req, res) => {
             await user.save();
         }
 
-        res.json({
-            success: true,
-            newBalance: user.balance,
-            message: 'ውርርዱ ተሳክቷል!'
-        });
+        res.json({ success: true, newBalance: user.balance, message: 'ውርርዱ ተሳክቷል!' });
     } catch (e) {
         res.status(500).json({ error: 'Server error' });
     }
 });
 
-// የዲፖዚት / ዊዝድሮ ጥያቄ API ለ ሚኒ አፕ (Mini App)
 app.post('/api/request', async (req, res) => {
     try {
         const { userId, userName, type, amount, details } = req.body;
@@ -236,7 +221,6 @@ app.post('/api/request', async (req, res) => {
     }
 });
 
-// የአስተያየት API ለ ሚኒ አፕ (Mini App)
 app.post('/api/comment', async (req, res) => {
     try {
         const { userId, userName, message } = req.body;
@@ -271,30 +255,23 @@ function getKenoKeyboard(selectedNumbers = [], betAmount = 10) {
     return Markup.inlineKeyboard(keyboard);
 }
 
-// የኬኖ ሁኔታ
 function getKenoStatusText(selectedNumbers, betAmount, userBalance) {
     let count = selectedNumbers.length;
     let multiplier = 0;
 
-    if (count === 10) { multiplier = 20; }
-    else if (count === 9) { multiplier = 10; }
-    else if (count === 8) { multiplier = 6; }
-    else if (count === 7) { multiplier = 3.5; }
-    else if (count === 6) { multiplier = 2; }
-    else if (count === 5) { multiplier = 1.2; }
-    else if (count === 4) { multiplier = 0.8; }
-    else if (count === 3) { multiplier = 0.5; }
-    else if (count === 2) { multiplier = 0.3; }
-    else if (count === 1) { multiplier = 0.2; }
+    if (count === 10) multiplier = 20;
+    else if (count === 9) multiplier = 10;
+    else if (count === 8) multiplier = 6;
+    else if (count === 7) multiplier = 3.5;
+    else if (count === 6) multiplier = 2;
+    else if (count === 5) multiplier = 1.2;
+    else if (count === 4) multiplier = 0.8;
+    else if (count === 3) multiplier = 0.5;
+    else if (count === 2) multiplier = 0.3;
+    else if (count === 1) multiplier = 0.2;
 
     let potentialWin = Math.round(betAmount + (betAmount * multiplier));
-
-    let desc = "";
-    if (count === 0) {
-        desc = "💡 *እባክዎ ከ 1 እስከ 10 ቁጥሮች ይምረጡ።*";
-    } else {
-        desc = `✨ **ሁኔታ:** ${count} ቁጥር መርጠዋል (ማባዣው **${multiplier}x** ነው)`;
-    }
+    let desc = count === 0 ? "💡 *እባክዎ ከ 1 እስከ 10 ቁጥሮች ይምረጡ።*" : `✨ **ሁኔታ:** ${count} ቁጥር መርጠዋል (ማባዣው **${multiplier}x** ነው)`;
 
     return `🎲 **ኬኖ ጨዋታ (የውርርድ መጠን: ${betAmount} ETB)**\n\n` +
            `የመረጧቸው ቁጥሮች: [ **${selectedNumbers.sort((a,b)=>a-b).join(', ')}** ] (${count}/10)\n\n` +
@@ -303,7 +280,7 @@ function getKenoStatusText(selectedNumbers, betAmount, userBalance) {
            `አካውንት ባላንስ: **ETB ${userBalance}**`;
 }
 
-// የቢንጎ 1-100 ቁጥሮች ሰሌዳ
+// የቢንጎ 1-100 ቁጥሮች ሰሌዳ (በ 10-10 እያደረገ ወደ ታች እንዲወርድ የተስተካከለ)
 async function getBingo1to100Keyboard() {
     let keyboard = [];
     let row = [];
@@ -319,6 +296,7 @@ async function getBingo1to100Keyboard() {
             row.push(Markup.button.callback(`${i}`, `b_pick_${i}`));
         }
 
+        // እያንዳንዱ ረድፍ 10 ቁጥሮች ብቻ ይዞ ወደ ታች እንዲወርድ ይደረጋል
         if (row.length === 10) {
             keyboard.push(row);
             row = [];
@@ -435,7 +413,6 @@ bot.on('contact', async (ctx) => {
     ctx.reply(`✅ ስልክ ቁጥርዎ በተሳካ ሁኔታ ተመዝግቧል!`, mainKeyboard);
 });
 
-// --- ቴሌግራም ሚኒ አፕ (Mini App) መክፈቻ ቁልፎች ---
 bot.hears('🚀 ሚኒ አፕ (Mini App) 🎮', (ctx) => {
     ctx.reply(
         `🚀 **እፉዬ ቴሌግራም ሚኒ አፕ ጨዋታዎች**\n\nበምቾት እና በፍጥነት በድር መተግበሪያ (Mini App) ለመጫወት ከታች ያለውን ቁልፍ ይጫኑ፡`,
@@ -637,7 +614,6 @@ bot.action(/keno_bet_(\d+)/, async (ctx) => {
     }
 
     kenoSessions[userId] = { selectedNumbers: [], betAmount: betAmount };
-
     let textMsg = getKenoStatusText([], betAmount, user.balance);
     ctx.editMessageText(textMsg, getKenoKeyboard([], betAmount));
 });
@@ -649,16 +625,9 @@ bot.action('view_payout_table', (ctx) => {
         `• **2 ቁጥር መርጦ 1 ሲመታ:** ያስያዙት ገንዘብ ተመላሽ (Refund)\n` +
         `• **3 ቁጥር መርጦ 2 ሲመታ:** ሽልማት አለው (Partial Win)\n` +
         `• **4 ቁጥር መርጦ 2 ሲመታ:** ትንሽ ሽልማት አለው (Partial Win)\n\n` +
-        `• **1 ቁጥር መርጦ:** 0.2x\n` +
-        `• **2 ቁጥር መርጦ:** 0.3x\n` +
-        `• **3 ቁጥር መርጦ:** 0.5x\n` +
-        `• **4 ቁጥር መርጦ:** 0.8x\n` +
-        `• **5 ቁጥር መርጦ:** 1.2x\n` +
-        `• **6 ቁጥር መርጦ:** 2.0x\n` +
-        `• **7 ቁጥር መርጦ:** 3.5x\n` +
-        `• **8 ቁጥር መርጦ:** 6.0x\n` +
-        `• **9 ቁጥር መርጦ:** 10.0x\n` +
-        `• **10 ቁጥር መርጦ:** 20.0x`,
+        `• **1 ቁጥር መርጦ:** 0.2x\n• **2 ቁጥር መርጦ:** 0.3x\n• **3 ቁጥር መርጦ:** 0.5x\n` +
+        `• **4 ቁጥር መርጦ:** 0.8x\n• **5 ቁጥር መርጦ:** 1.2x\n• **6 ቁጥር መርጦ:** 2.0x\n` +
+        `• **7 ቁጥር መርጦ:** 3.5x\n• **8 ቁጥር መርጦ:** 6.0x\n• **9 ቁጥር መርጦ:** 10.0x\n• **10 ቁጥር መርጦ:** 20.0x`,
         Markup.inlineKeyboard([[Markup.button.callback('🔙 ወደ ኬኖ መጫወቻ ተመለስ', 'back_to_keno')]])
     );
 });
@@ -667,7 +636,6 @@ bot.action('back_to_keno', async (ctx) => {
     const userId = ctx.from.id;
     let session = kenoSessions[userId] || { selectedNumbers: [], betAmount: 10 };
     let user = await getOrCreateUser(userId);
-
     let textMsg = getKenoStatusText(session.selectedNumbers, session.betAmount, user.balance);
     ctx.editMessageText(textMsg, getKenoKeyboard(session.selectedNumbers, session.betAmount));
 });
@@ -691,7 +659,6 @@ bot.action(/keno_num_(\d+)/, async (ctx) => {
 
     let user = await getOrCreateUser(userId);
     let textMsg = getKenoStatusText(session.selectedNumbers, session.betAmount, user.balance);
-
     ctx.editMessageText(textMsg, getKenoKeyboard(session.selectedNumbers, session.betAmount)).catch(()=>{});
 });
 
@@ -754,16 +721,16 @@ bot.action('start_keno_draw', async (ctx) => {
 
             if (matchCount === selectedCount) {
                 let multiplier = 0;
-                if (selectedCount === 10) { multiplier = 20; }
-                else if (selectedCount === 9) { multiplier = 10; }
-                else if (selectedCount === 8) { multiplier = 6; }
-                else if (selectedCount === 7) { multiplier = 3.5; }
-                else if (selectedCount === 6) { multiplier = 2; }
-                else if (selectedCount === 5) { multiplier = 1.2; }
-                else if (selectedCount === 4) { multiplier = 0.8; }
-                else if (selectedCount === 3) { multiplier = 0.5; }
-                else if (selectedCount === 2) { multiplier = 0.3; }
-                else if (selectedCount === 1) { multiplier = 0.2; }
+                if (selectedCount === 10) multiplier = 20;
+                else if (selectedCount === 9) multiplier = 10;
+                else if (selectedCount === 8) multiplier = 6;
+                else if (selectedCount === 7) multiplier = 3.5;
+                else if (selectedCount === 6) multiplier = 2;
+                else if (selectedCount === 5) multiplier = 1.2;
+                else if (selectedCount === 4) multiplier = 0.8;
+                else if (selectedCount === 3) multiplier = 0.5;
+                else if (selectedCount === 2) multiplier = 0.3;
+                else if (selectedCount === 1) multiplier = 0.2;
 
                 winAmount = Math.round(betAmount + (betAmount * multiplier));
             } 
@@ -1211,4 +1178,4 @@ bot.on('text', async (ctx) => {
 });
 
 bot.launch();
-console.log('🤖 Bot is running with Telegram Mini App Integration & Taken Numbers Fix!');
+console.log('🤖 Bot is running with Updated Bingo Keyboard (10x10 rows)!');
