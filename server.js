@@ -7,7 +7,6 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
-// ቴሌግራም ሚኒ አፕ (Mini App) ፋይሎችን ማስተናገድ እንዲችል ስታቲክ ማህደር (Static folder) እንከፍታለን
 app.use(express.static('public'));
 
 // --- 1. የሞንጎዲቢ ግንኙነት (MongoDB Connection) ---
@@ -280,7 +279,6 @@ function getKenoStatusText(selectedNumbers, betAmount, userBalance) {
            `አካውንት ባላንስ: **ETB ${userBalance}**`;
 }
 
-// የቢንጎ 1-100 ቁጥሮች ሰሌዳ (በ 10-10 እያደረገ ወደ ታች እንዲወርድ የተስተካከለ)
 async function getBingo1to100Keyboard() {
     let keyboard = [];
     let row = [];
@@ -296,7 +294,6 @@ async function getBingo1to100Keyboard() {
             row.push(Markup.button.callback(`${i}`, `b_pick_${i}`));
         }
 
-        // እያንዳንዱ ረድፍ 10 ቁጥሮች ብቻ ይዞ ወደ ታች እንዲወርድ ይደረጋል
         if (row.length === 10) {
             keyboard.push(row);
             row = [];
@@ -1178,4 +1175,4 @@ bot.on('text', async (ctx) => {
 });
 
 bot.launch();
-console.log('🤖 Bot is running with Updated Bingo Keyboard (10x10 rows)!');
+console.log('🤖 Bot is running successfully!');
