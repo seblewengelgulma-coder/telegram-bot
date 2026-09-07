@@ -115,8 +115,8 @@
         <!-- Waiting & Live Caller Screen (Hidden initially) -->
         <div id="bingo-live-box" style="display: none;">
             <div class="bingo-lobby">
-                <div style="font-size: 13px; color: #facc15; font-weight: bold;" id="bingo-status-text">ተጫዋቾችን በመጠባበቅ ላይ... (1/2)</div>
-                <div style="font-size: 24px; font-weight: bold; color: #38bdf8; margin: 8px 0;" id="bingo-timer">ቆጣሪ: 30 ሰከንድ</div>
+                <div style="font-size: 13px; color: #facc15; font-weight: bold;" id="bingo-status-text">ተጫዋቾችን በመጠባበቅ ላይ...</div>
+                <div style="font-size: 20px; font-weight: bold; color: #38bdf8; margin: 8px 0;" id="bingo-timer">ቆጣሪ: 30 ሰከንድ</div>
             </div>
 
             <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">ያለፉት የተጠሩ ቁጥሮች ታሪክ:</div>
@@ -196,7 +196,7 @@
             btn.classList.add('active');
         }
 
-        // --- KENO LOGIC WITH DYNAMIC PAYOUT PREVIEW ---
+        // --- KENO LOGIC ---
         let selectedKenoNums = [];
         const kenoGrid = document.getElementById('keno-grid');
         
@@ -217,9 +217,9 @@
         function updateKenoPotentialWin() {
             let bet = parseInt(document.getElementById('keno-bet-amount').value);
             let count = selectedKenoNums.length;
-            let estimatedWin = count * bet * 2; // ቀላል የጉርሻ ስሌት ምሳሌ
+            let estimatedWin = count * bet * 2;
             if(count === 0) estimatedWin = 0;
-            document.getElementById('keno-potential-view').innerText = `የመረጧቸው: ${count} ቁጥሮች | የሚጠበቀውግምት ሽልማት: ~${estimatedWin} ETB`;
+            document.getElementById('keno-potential-view').innerText = `የመረጧቸው: ${count} ቁጥሮች | የሚጠበቀው ሽልማት: ~${estimatedWin} ETB`;
         }
 
         function toggleKenoNum(num) {
@@ -299,7 +299,7 @@
             }, 3000);
         }
 
-        // --- BINGO ADVANCED MULTIPLAYER & STAKE LOBBY LOGIC ---
+        // --- BINGO FIXED LOBBY & GAME FLOW ---
         let bingoCells = [];
         let calledNumbers = [];
         let bingoInterval = null;
@@ -313,21 +313,31 @@
                 return;
             }
 
-            // የውርርድ ክፍያ ከሰርቨር ጋር መቀነስ
-            let res = await fetch('/api/play/bingo', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ userId, betAmount: selectedBingoStake })
-            });
-            let data = await res.json();
-            if(!data.success) { alert(data.message); return; }
+            // የሰርቨር ጥያቄ በመላክ ውርርዱን መቀነስ
+            try {
+                let res = await fetch('/api/play/bingo', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ userId, betAmount: selectedBingoStake })
+                });
+                let data = await res.json();
+                if(!data.success) { 
+                    alert(data.message || 'ስህተት ተፈጥሯል'); 
+                    return; 
+                }
 
-            userBalance = data.newBalance;
-            document.getElementById('u-balance').innerText = userBalance;
+                userBalance = data.newBalance;
+                document.getElementById('u-balance').innerText = userBalance;
+            } catch(e) {
+                console.error(e);
+                alert('ሰርቨር ጋር መገናኘት አልተቻለም');
+                return;
+            }
 
-            // ዩአይን መቀየር (የውርርድ ምርጫን ደብቆ የሰሌዳ እና ቆጣሪ ማሳየት)
+            // የውርርድ መስጫውን ደብቆ የጨዋታውን ሰሌዳ ማሳየት
             document.getElementById('bingo-setup-box').style.display = 'none';
             document.getElementById('bingo-live-box').style.display = 'block';
+            document.getElementById('bingo-result').innerText = "ጨዋታው በሂደት ላይ ነው...";
 
             generateRandomBingoCard();
             startCountdownTimer();
@@ -418,7 +428,6 @@
                     let currentNum = allPool[callIndex];
                     calledNumbers.push(currentNum);
 
-                    // ታሪክ ባር ውስጥ ማሳየት (የቀድሞ እና አዲሶቹ ቁጥሮች ከላይ እንዲታዩ)
                     historyBar.innerHTML = '';
                     calledNumbers.slice().reverse().forEach(n => {
                         let badge = document.createElement('div');
@@ -464,13 +473,12 @@
             }
 
             clearInterval(bingoInterval);
-            let winAmount = selectedBingoStake * 5; // የድል ሽልማት ክፍፍል
+            let winAmount = selectedBingoStake * 5;
 
             userBalance += winAmount;
             document.getElementById('u-balance').innerText = userBalance;
             document.getElementById('bingo-result').innerHTML = `<span style="color:#4ade80;">🎉 BINGO! አሸንፈዋል! ሽልማት: ${winAmount} ETB</span>`;
             
-            // ጨዋታው ሲያልቅ እንደ አዲስ የቢንጎ ምርጫ ሳጥን እንዲመለስ ማድረግ
             setTimeout(() => {
                 document.getElementById('bingo-setup-box').style.display = 'block';
                 document.getElementById('bingo-live-box').style.display = 'none';
