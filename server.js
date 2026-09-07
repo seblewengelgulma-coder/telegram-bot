@@ -7,6 +7,8 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
+// ቴሌግራም ሚኒ አፕ (Mini App) ፋይሎችን ማስተናገድ እንዲችል ስታቲክ ማህደር (Static folder) እንከፍታለን
+app.use(express.static('public'));
 
 // --- 1. የሞንጎዲቢ ግንኙነት (MongoDB Connection) ---
 const MONGO_URI = process.env.MONGO_URI;
@@ -74,6 +76,9 @@ if (!TOKEN) {
     process.exit(1);
 }
 
+// 🌐 የቴሌግራም ሚኒ አፕ (Mini App) ዌብ አድራሻ ከ Render Environment Variable የሚነበብበት
+const WEBAPP_URL = process.env.WEBAPP_URL || 'https://your-render-app-url.onrender.com';
+
 const bot = new Telegraf(TOKEN);
 const ADMIN_ID = 380035906;
 
@@ -99,14 +104,97 @@ app.get('/', (req, res) => {
   res.send('Efuye Bingo & Keno Ultimate Bot Server is running!');
 });
 
-// 🌐 FETCH ምሳሌ 1: ከሰርቨር በኩል (Express Route) ውጫዊ API መጥራት ሲፈልጉ
-app.get('/test-fetch', async (req, res) => {
+// --- API Endpoints ለ ቴሌግራም ሚኒ አፕ (Mini App) ጨዋታዎች ማስተናገጃ ---
+app.get('/api/user/:userId', async (req, res) => {
     try {
-        const response = await fetch('https://jsonplaceholder.typicode.com/todos/1');
-        const data = await response.json();
-        res.json({ success: true, data });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        const user = await getOrCreateUser(parseInt(req.params.userId));
+        res.json(user);
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// የኬኖ ጨዋታ ውጤት ማስላት እና ባላንስ ማስተካከል API
+app.post('/api/play/keno', async (req, res) => {
+    try {
+        const { userId, selectedNumbers, betAmount } = req.body;
+        let user = await getOrCreateUser(userId);
+
+        if (userId !== ADMIN_ID && user.balance < betAmount) {
+            return res.json({ success: false, message: 'በቂ ባላንስ የለዎትም!' });
+        }
+
+        if (userId !== ADMIN_ID) {
+            user.balance -= betAmount;
+            user.totalGames += 1;
+            await user.save();
+        }
+
+        let allNums = Array.from({length: 80}, (_, i) => i + 1);
+        let drawnNumbers = [];
+        while(drawnNumbers.length < 20) {
+            let rIdx = Math.floor(Math.random() * allNums.length);
+            drawnNumbers.push(allNums.splice(rIdx, 1)[0]);
+        }
+
+        let matches = selectedNumbers.filter(n => drawnNumbers.includes(n));
+        let matchCount = matches.length;
+        let winAmount = 0;
+        let isRefund = false;
+        let selectedCount = selectedNumbers.length;
+
+        if (matchCount === selectedCount) {
+            let multiplier = 0;
+            if (selectedCount === 10) { multiplier = 20; }
+            else if (selectedCount === 9) { multiplier = 10; }
+            else if (selectedCount === 8) { multiplier = 6; }
+            else if (selectedCount === 7) { multiplier = 3.5; }
+            else if (selectedCount === 6) { multiplier = 2; }
+            else if (selectedCount === 5) { multiplier = 1.2; }
+            else if (selectedCount === 4) { multiplier = 0.8; }
+            else if (selectedCount === 3) { multiplier = 0.5; }
+            else if (selectedCount === 2) { multiplier = 0.3; }
+            else if (selectedCount === 1) { multiplier = 0.2; }
+
+            winAmount = Math.round(betAmount + (betAmount * multiplier));
+        } 
+        else if (selectedCount === 4 && matchCount === 2) {
+            winAmount = Math.round(betAmount + (betAmount * 0.2));
+        }
+        else if (selectedCount === 3 && matchCount === 2) {
+            winAmount = Math.round(betAmount + (betAmount * 0.5));
+        }
+        else if (selectedCount === 2 && matchCount === 1) {
+            isRefund = true;
+            winAmount = betAmount;
+        }
+
+        if (winAmount > 0) {
+            if (userId !== ADMIN_ID) {
+                user.balance += winAmount;
+                if (!isRefund) {
+                    user.wins += 1;
+                    user.level += 1;
+                }
+                await user.save();
+            }
+        } else {
+            if (userId !== ADMIN_ID) {
+                user.losses += 1;
+                await user.save();
+            }
+        }
+
+        res.json({
+            success: true,
+            drawnNumbers,
+            matchCount,
+            winAmount,
+            isRefund,
+            newBalance: user.balance
+        });
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
     }
 });
 
@@ -133,6 +221,7 @@ function getKenoKeyboard(selectedNumbers = [], betAmount = 10) {
     return Markup.inlineKeyboard(keyboard);
 }
 
+// የኬኖ ሁኔታ (የተስተካከለ የሂሳብ ስሌት)
 function getKenoStatusText(selectedNumbers, betAmount, userBalance) {
     let count = selectedNumbers.length;
     let multiplier = 0;
@@ -164,6 +253,7 @@ function getKenoStatusText(selectedNumbers, betAmount, userBalance) {
            `አካውንት ባላንስ: **ETB ${userBalance}**`;
 }
 
+// የቢንጎ 1-100 ቁጥሮች ሰሌዳ
 async function getBingo1to100Keyboard() {
     let keyboard = [];
     let row = [];
@@ -253,7 +343,7 @@ function checkWinCondition(matrix) {
 }
 
 const mainKeyboard = Markup.keyboard([
-    ['🎮 ፕለይ (Play)'],
+    ['🎮 ፕለይ (Play)', '🚀 ሚኒ አፕ (Mini App) 🎮'],
     ['💰 ዲፖዚት (Deposit)', '💳 ዊዝድሮ (Withdraw)'],
     ['👤 ፕሮፋይል (Profile)', '💬 ኮሜንት (Comment)'],
     ['📖 መመሪያ (Instructions)']
@@ -263,6 +353,7 @@ const adminKeyboard = Markup.keyboard([
     ['📊 የአድሚን ባላንስ ማየት', '👥 የተጫዋቾች ዝርዝር (Player List)'],
     ['📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', '💬 የተጫዋቾች ኮሜንቶች'],
     ['💵 አድሚን ዲፖዚት ማድረግ', '🎮 አድሚን መጫወቻ (Admin Play)'],
+    ['🚀 አድሚን ሚኒ አፕ (Admin Mini App)'],
     ['🔙 ወደ ዋናው ሜኑ ተመለስ']
 ]).resize();
 
@@ -294,12 +385,33 @@ bot.on('contact', async (ctx) => {
     ctx.reply(`✅ ስልክ ቁጥርዎ በተሳካ ሁኔታ ተመዝግቧል!`, mainKeyboard);
 });
 
+// --- ቴሌግራም ሚኒ አፕ (Mini App) መክፈቻ ቁልፎች (ለተጫዋች እና ለአድሚን) ---
+bot.hears('🚀 ሚኒ አፕ (Mini App) 🎮', (ctx) => {
+    ctx.reply(
+        `🚀 **እፉዬ ቴሌግራም ሚኒ አፕ ጨዋታዎች**\n\nበምቾት እና በፍጥነት በድር መተግበሪያ (Mini App) ለመጫወት ከታች ያለውን ቁልፍ ይጫኑ፡`,
+        Markup.inlineKeyboard([
+            [Markup.button.webApp('🎮 ሚኒ አፕ (Mini App) ክፈት', `${WEBAPP_URL}`)]
+        ])
+    );
+});
+
+bot.hears('🚀 አድሚን ሚኒ አፕ (Admin Mini App)', (ctx) => {
+    if (ctx.from.id !== ADMIN_ID) return;
+    ctx.reply(
+        `👑 **የአድሚን ሚኒ አፕ ፓነል**\n\nሚኒ አፕ ፕላትፎርሙን ለመክፈት ከታች ያለውን ቁልፍ ይጫኑ፡`,
+        Markup.inlineKeyboard([
+            [Markup.button.webApp('👑 አድሚን ሚኒ አፕ ክፈት', `${WEBAPP_URL}`)]
+        ])
+    );
+});
+
 bot.hears('🎮 ፕለይ (Play)', (ctx) => {
     ctx.reply(
         `🎮 **እባክዎ መጫወት የሚፈልጉትን ጨዋታ ይምረጡ፦**`,
         Markup.inlineKeyboard([
             [Markup.button.callback('🎯 ቢንጎ ጨዋታ (Bingo)', 'select_bingo_main')],
-            [Markup.button.callback('🎲 ኬኖ ጨዋታ (Keno)', 'select_keno')]
+            [Markup.button.callback('🎲 ኬኖ ጨዋታ (Keno)', 'select_keno')],
+            [Markup.button.webApp('🚀 ሚኒ አፕ (Mini App) ጨዋታ', `${WEBAPP_URL}`)]
         ])
     );
 });
@@ -606,12 +718,10 @@ bot.action('start_keno_draw', async (ctx) => {
                 winAmount = Math.round(betAmount + (betAmount * multiplier));
             } 
             else if (selectedCount === 4 && matchCount === 2) {
-                let multiplier = 0.2; 
-                winAmount = Math.round(betAmount + (betAmount * multiplier));
+                winAmount = Math.round(betAmount + (betAmount * 0.2));
             }
             else if (selectedCount === 3 && matchCount === 2) {
-                let multiplier = 0.5; 
-                winAmount = Math.round(betAmount + (betAmount * multiplier));
+                winAmount = Math.round(betAmount + (betAmount * 0.5));
             }
             else if (selectedCount === 2 && matchCount === 1) {
                 isRefund = true;
@@ -1024,7 +1134,7 @@ bot.on('text', async (ctx) => {
         }
 
         if (stepInfo.action === 'withdraw_amount') {
-            const amount = parseInt(text.match(/\d+/)?.[0] === undefined ? 0 : text.match(/\d+/)[0]);
+            const amount = parseInt(text.match(/\d+/)?.[0] || 0);
             delete userSteps[userId];
             let user = await getOrCreateUser(userId);
             if (user.balance < amount) return ctx.reply(`❌ በቂ ባላንስ የለዎትም!`);
@@ -1051,4 +1161,4 @@ bot.on('text', async (ctx) => {
 });
 
 bot.launch();
-console.log('🤖 Bot is running with Fetch Integration!');
+console.log('🤖 Bot is running with Telegram Mini App Integration & Taken Numbers Fix!');
