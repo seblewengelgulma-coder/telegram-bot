@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>እፉዬ ቢንጎ እና ኬኖ ሚኒ አፕ</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f172a, #1e293b);
+            color: #fff;
+            margin: 0;
+            padding: 15px;
+            text-align: center;
+        }
+        h1 { color: #38bdf8; font-size: 24px; margin-bottom: 5px; }
+        .container { max-width: 450px; margin: 0 auto; background: rgba(255, 255, 255, 0.05); padding: 15px; border-radius: 12px; backdrop-filter: blur(10px); }
+        .tabs { display: flex; justify-content: center; gap: 10px; margin-bottom: 15px; }
+        button { background: #38bdf8; border: none; padding: 10px 20px; color: #0f172a; font-weight: bold; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+        button:hover { background: #0ea5e9; }
+        .active-tab { background: #10b981 !important; color: #fff; }
+        
+        /* ኬኖ ግሪድ ዲዛይን */
+        .keno-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; margin-top: 15px; }
+        .keno-btn { background: #334155; color: #fff; border: none; padding: 10px 0; border-radius: 4px; font-size: 14px; cursor: pointer; }
+        .keno-btn.selected { background: #10b981; color: #fff; font-weight: bold; transform: scale(1.05); }
+        
+        .info-box { background: rgba(0,0,0,0.3); padding: 10px; border-radius: 6px; margin-top: 15px; font-size: 14px; }
+        .action-btn { width: 100%; background: #f59e0b; color: #fff; margin-top: 15px; padding: 12px; font-size: 16px; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>🎲 እፉዬ ጌም ማዕከል </h1>
+        <p style="font-size: 13px; color: #94a3b8;">ባለ ከለር የቴሌግራም ሚኒ አፕ ጨዋታ</p>
+
+        <div class="tabs">
+            <button id="kenoTab" class="active-tab" onclick="switchGame('keno')">ኬኖ (Keno)</button>
+            <button id="bingoTab" onclick="switchGame('bingo')">ቢንጎ (Bingo)</button>
+        </div>
+
+        <!-- ኬኖ ጨዋታ ክፍል -->
+        <div id="kenoSection">
+            <div class="info-box">እባክዎ ከ 1 እስከ 80 ያሉት ቁጥሮች ውስጥ <b>እስከ 10 ቁጥሮች</b> ይምረጡ።</div>
+            <div class="keno-grid" id="kenoGrid"></div>
+            <button class="action-btn" onclick="startKenoDraw()">🎲 ኬኖ ድሮው ጀምር</button>
+        </div>
+
+        <!-- ቢንጎ ክፍል -->
+        <div id="bingoSection" style="display: none;">
+            <div class="info-box">🎯 የቢንጎ ሰሌዳ እና አጨዋወት በሂደት ላይ...</div>
+            <p>በቦቱ በኩል ቁጥር በመምረጥ መጫወት ይችላሉ!</p>
+        </div>
+    </div>
+
+    <script>
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+
+        let selectedKenoNumbers = [];
+        const kenoGridEl = document.getElementById('kenoGrid');
+
+        // ኬኖ ቁጥሮችን መፍጠር (1 እስከ 80)
+        for (let i = 1; i <= 80; i++) {
+            let btn = document.createElement('button');
+            btn.className = 'keno-btn';
+            btn.innerText = i;
+            btn.onclick = () => toggleKenoNumber(i, btn);
+            kenoGridEl.appendChild(btn);
+        }
+
+        function toggleKenoNumber(num, btnElement) {
+            let index = selectedKenoNumbers.indexOf(num);
+            if (index > -1) {
+                selectedKenoNumbers.splice(index, 1);
+                btnElement.classList.remove('selected');
+            } else {
+                if (selectedKenoNumbers.length >= 10) {
+                    alert('ቢበዛ 10 ቁጥሮች ብቻ መምረጥ ይችላሉ!');
+                    return;
+                }
+                selectedKenoNumbers.push(num);
+                btnElement.classList.add('selected');
+            }
+        }
+
+        function switchGame(game) {
+            if (game === 'keno') {
+                document.getElementById('kenoSection').style.display = 'block';
+                document.getElementById('bingoSection').style.display = 'none';
+                document.getElementById('kenoTab').classList.add('active-tab');
+                document.getElementById('bingoTab').classList.remove('active-tab');
+            } else {
+                document.getElementById('kenoSection').style.display = 'none';
+                document.getElementById('bingoSection').style.display = 'block';
+                document.getElementById('bingoTab').classList.add('active-tab');
+                document.getElementById('kenoTab').classList.remove('active-tab');
+            }
+        }
+
+        function startKenoDraw() {
+            if (selectedKenoNumbers.length === 0) {
+                alert('እባክዎ ቢያንስ አንድ ቁጥር ይምረጡ!');
+                return;
+            }
+            alert(`የመረጧቸው ቁጥሮች: ${selectedKenoNumbers.join(', ')}\nጨዋታው ተጀምሯል!`);
+        }
+    </script>
+</body>
+</html>
