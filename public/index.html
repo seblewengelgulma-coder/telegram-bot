@@ -72,7 +72,7 @@
         <button class="tab-btn" onclick="switchTab('comment', this)">💬 አስተያየት</button>
     </div>
 
-    <!-- KENO SECTION -->
+    <!-- 1. KENO SECTION -->
     <div id="keno-section" class="section active">
         <h3>🎲 የኬኖ ጨዋታ (ከ 1 እስከ 10 ቁጥሮች ይምረጡ)</h3>
         <div class="bet-selector">
@@ -90,7 +90,7 @@
         <div class="result-box" id="keno-result">ቁጥሮችን ይምረጡና ጨዋታ ይጀምሩ</div>
     </div>
 
-    <!-- BINGO SECTION -->
+    <!-- 2. BINGO SECTION -->
     <div id="bingo-section" class="section">
         <h3>🎯 የቢንጎ የውርርድ ክፍፍል እና የቀጥታ ጨዋታ</h3>
         
@@ -111,7 +111,7 @@
             <div class="bingo-lobby">
                 <div style="font-size: 14px; color: #38bdf8; font-weight: bold; margin-bottom: 5px;" id="player-count-text">👥 የተጫዋቾች ብዛት: 1 ሰው</div>
                 <div style="font-size: 13px; color: #facc15; font-weight: bold;" id="bingo-status-text">ተጫዋቾችን በመጠባበቅ ላይ...</div>
-                <div style="font-size: 15px; font-weight: bold; color: #4ade80; margin: 6px 0;" id="pool-info-text">ጠቅላላ ገቢ: 0 ETB | አሸናፊው (90%): 0 ETB</div>
+                <div style="font-size: 14px; font-weight: bold; color: #4ade80; margin: 6px 0;" id="pool-info-text">ጠቅላላ ገቢ: 0 ETB | አሸናፊው (90%): 0 ETB</div>
                 <div style="font-size: 16px; font-weight: bold; color: #f8fafc; margin-top: 5px;" id="bingo-timer">ቆጣሪ: 30 ሰከንድ</div>
             </div>
 
@@ -128,7 +128,7 @@
         <div class="result-box" id="bingo-result">የውርርድ መጠን በመምረጥ ጨዋታውን ይቀላቀሉ</div>
     </div>
 
-    <!-- WALLET SECTION -->
+    <!-- 3. WALLET SECTION -->
     <div id="wallet-section" class="section">
         <h3>💳 የዲፖዚት እና ዊዝድሮ ጥያቄ</h3>
         <div class="form-group">
@@ -150,7 +150,7 @@
         <div class="result-box" id="wallet-result" style="margin-top:10px;">ጥያቄዎን በአስተማማኝ ሁኔታ ይላኩ</div>
     </div>
 
-    <!-- COMMENT SECTION -->
+    <!-- 4. COMMENT SECTION -->
     <div id="comment-section" class="section">
         <h3>💬 ለአድሚን አስተያየት መስጫ</h3>
         <div class="form-group">
@@ -193,7 +193,7 @@
             btn.classList.add('active');
         }
 
-        // --- KENO ---
+        // --- KENO LOGIC ---
         let selectedKenoNums = [];
         const kenoGrid = document.getElementById('keno-grid');
         
@@ -296,7 +296,7 @@
             }, 3000);
         }
 
-        // --- BINGO LOBBY & 10% ADMIN COMMISSION LOGIC ---
+        // --- BINGO LOBBY & COMMISSION LOGIC ---
         let bingoCells = [];
         let calledNumbers = [];
         let bingoInterval = null;
@@ -325,12 +325,11 @@
 
                 userBalance = data.newBalance;
                 document.getElementById('u-balance').innerText = userBalance;
-                
-                // ከሰርቨር የተገኘውን የተጫዋቾች ትክክለኛ ቁጥር መጠቀም (ካለ) ወይም በናሙና መልክ ማሳየት
-                currentPlayersCount = data.playerCount || (Math.floor(Math.random() * 4) + 2);
+                currentPlayersCount = data.playerCount || 1;
             } catch(e) {
                 console.error(e);
-                currentPlayersCount = 1;
+                alert('ሰርቨር ጋር መገናኘት አልተቻለም');
+                return;
             }
 
             document.getElementById('bingo-setup-box').style.display = 'none';
@@ -357,12 +356,36 @@
             
             statusEl.innerText = `ተጫዋቾች ተቀላቀሉ (ክፍል: ${selectedBingoStake} ETB)`;
             
-            let countdown = setInterval(() => {
+            let countdown = setInterval(async () => {
                 timeLeft--;
                 timerEl.innerText = `ጨዋታው ሊጀምር: ${timeLeft} ሰከንድ ይቀረዋል`;
                 
                 if(timeLeft <= 0) {
                     clearInterval(countdown);
+                    
+                    // ⏳ ቆጣሪው ሲያልቅ ባለ 1 ተጫዋች መሆኑን ወይም አለመሆኑን ከሰርቨር ማረጋገጥ
+                    try {
+                        let res = await fetch('/api/bingo/check-start', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ betAmount: selectedBingoStake })
+                        });
+                        let data = await res.json();
+                        
+                        if(!data.success && data.refunded) {
+                            userBalance = data.newBalance;
+                            document.getElementById('u-balance').innerText = userBalance;
+                            alert(data.message);
+                            
+                            document.getElementById('bingo-setup-box').style.display = 'block';
+                            document.getElementById('bingo-live-box').style.display = 'none';
+                            document.getElementById('bingo-result').innerText = data.message;
+                            return;
+                        }
+                    } catch(e) {
+                        console.error(e);
+                    }
+
                     timerEl.innerText = "🚀 ጨዋታው ተጀምሯል!";
                     startLiveCaller();
                 }
@@ -468,16 +491,13 @@
             }
 
             clearInterval(bingoInterval);
-            
-            // የሽልማት ስሌት (10% ለአድሚን ተቀንሶ 90% ለአሸናፊው የሚሰጥበት)
-            let totalPool = currentPlayersCount * selectedBingoStake;
-            let winAmount = totalPool * 0.90; 
+            let winAmount = currentPlayersCount * selectedBingoStake * 0.90;
 
             try {
                 let res = await fetch('/api/bingo/finish', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ winnerId: userId })
+                    body: JSON.stringify({ winnerId: userId, betAmount: selectedBingoStake })
                 });
                 let data = await res.json();
                 if(data.success && data.summary) {
@@ -522,7 +542,10 @@
                 } else {
                     alert(data.message || 'ስህተት ተፈጥሯል');
                 }
-            } catch(e) { console.error(e); alert('ሰርቨር ጋር መገናኘት አልተቻለም'); }
+            } catch(e) {
+                console.error(e);
+                alert('ሰርቨር ጋር መገናኘት አልተቻለም');
+            }
         }
 
         async function sendComment() {
@@ -545,7 +568,10 @@
                 } else {
                     alert(data.message || 'ስህተት ተፈጥሯል');
                 }
-            } catch(e) { console.error(e); alert('ሰርቨር ጋር መገናኘት አልተቻለም'); }
+            } catch(e) {
+                console.error(e);
+                alert('ሰርቨር ጋር መገናኘት አልተቻለም');
+            }
         }
     </script>
 </body>
