@@ -37,8 +37,9 @@
 
         /* Bingo Game Styles */
         .bingo-lobby { background: #0f172a; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 15px; border: 1px solid #334155; }
-        .called-history-bar { display: flex; gap: 5px; overflow-x: auto; padding: 5px; background: #0f172a; border-radius: 8px; margin-bottom: 10px; min-height: 40px; align-items: center; }
-        .history-num-badge { background: #3b82f6; color: white; padding: 4px 8px; border-radius: 5px; font-size: 12px; font-weight: bold; flex-shrink: 0; }
+        
+        /* የተስተካከለ የቢንጎ ቁጥሮች ማሳያ (በየ 10ቱ ወደ ታች እንዲወርድ የተደረገ) */
+        .called-history-box { background: #0f172a; color: #fff; padding: 12px; border-radius: 8px; margin-bottom: 12px; min-height: 50px; font-size: 15px; font-weight: bold; line-height: 1.6; text-align: left; border: 1px solid #334155; }
         
         .bingo-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; max-width: 320px; margin: 15px auto; }
         .bingo-cell { background: #334155; border: 1px solid #475569; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-weight: bold; border-radius: 6px; cursor: pointer; font-size: 14px; color: #fff; transition: 0.2s; }
@@ -119,9 +120,10 @@
                 <div style="font-size: 20px; font-weight: bold; color: #38bdf8; margin: 8px 0;" id="bingo-timer">ቆጣሪ: 30 ሰከንድ</div>
             </div>
 
-            <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">ያለፉት የተጠሩ ቁጥሮች ታሪክ:</div>
-            <div class="called-history-bar" id="called-history-bar">
-                <span style="font-size: 11px; color: #64748b;">ቁጥሮች ገና አልተጠሩም</span>
+            <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">ያለፉት የተጠሩ ቁጥሮች ታሪክ (በ 10 እያደረገ ወደ ታች):</div>
+            <!-- የተስተካከለ የወጡ ቁጥሮች ማሳያ ቦክስ -->
+            <div class="called-history-box" id="called-history-box">
+                📢 የወጡ ቁጥሮች እዚህ ይታያሉ...
             </div>
 
             <div class="bingo-grid" id="bingo-board"></div>
@@ -169,8 +171,10 @@
         const tg = window.Telegram.WebApp;
         tg.expand();
 
-        const userId = tg.initDataUnsafe?.user?.id || 380035906;
-        const userName = tg.initDataUnsafe?.user?.first_name || 'ተጫዋች';
+        // 1. የተስተካከለ ዩዘር ID ማግኛ (ለሁሉም ተጫዋቾች በትክክል እንዲሰራ)
+        const tgUser = tg.initDataUnsafe?.user;
+        const userId = tgUser ? tgUser.id : 380035906; // ተጫዋቹ ከሌለ ወይም ዌብ ላይ ሲከፈት ለአድሚን በነባሪ ይሰራል
+        const userName = tgUser ? (tgUser.first_name || 'ተጫዋች') : 'ተጫዋች';
         
         document.getElementById('u-id').innerText = userId;
         document.getElementById('u-name').innerText = userName;
@@ -313,7 +317,6 @@
                 return;
             }
 
-            // የሰርቨር ጥያቄ በመላክ ውርርዱን መቀነስ
             try {
                 let res = await fetch('/api/play/bingo', {
                     method: 'POST',
@@ -334,7 +337,6 @@
                 return;
             }
 
-            // የውርርድ መስጫውን ደብቆ የጨዋታውን ሰሌዳ ማሳየት
             document.getElementById('bingo-setup-box').style.display = 'none';
             document.getElementById('bingo-live-box').style.display = 'block';
             document.getElementById('bingo-result').innerText = "ጨዋታው በሂደት ላይ ነው...";
@@ -421,20 +423,21 @@
             allPool.sort(() => Math.random() - 0.5);
 
             let callIndex = 0;
-            let historyBar = document.getElementById('called-history-bar');
+            let historyBox = document.getElementById('called-history-box');
 
             bingoInterval = setInterval(() => {
                 if(callIndex < allPool.length) {
                     let currentNum = allPool[callIndex];
                     calledNumbers.push(currentNum);
 
-                    historyBar.innerHTML = '';
-                    calledNumbers.slice().reverse().forEach(n => {
-                        let badge = document.createElement('div');
-                        badge.className = 'history-num-badge';
-                        badge.innerText = n;
-                        historyBar.appendChild(badge);
-                    });
+                    // --- የተስተካከለ የቁጥሮች ታሪክ ማሳያ (በየ 10ቱ ወደ ታች እንዲወርድ) ---
+                    let formattedRows = [];
+                    for (let i = 0; i < calledNumbers.length; i += 10) {
+                        let chunk = calledNumbers.slice(i, i + 10).join(', ');
+                        formattedRows.push(chunk);
+                    }
+                    historyBox.innerHTML = `🟢 <b>የወጡ ቁጥሮች ታሪክ:</b><br>` + formattedRows.join('<br>');
+                    // ----------------------------------------------------
 
                     for(let r=0; r<5; r++) {
                         for(let c=0; c<5; c++) {
