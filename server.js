@@ -76,8 +76,8 @@ if (!TOKEN) {
     process.exit(1);
 }
 
-// 🌐 የቴሌግራም ሚኒ አፕ (Mini App) ዌብ አድራሻ (ትክክለኛው የሬንደር ዩአርኤል ያለ /miniapp)
-const WEBAPP_URL = process.env.WEBAPP_URL || 'https://telegram-bot-xer2.onrender.com](https://telegram-bot-xer2.onrender.com';
+// 🌐 የቴሌግራም ሚኒ አፕ (Mini App) ዌብ አድራሻ ከ Render Environment Variable የሚነበብበት
+const WEBAPP_URL = process.env.WEBAPP_URL || 'https://your-render-app-url.onrender.com';
 
 const bot = new Telegraf(TOKEN);
 const ADMIN_ID = 380035906;
@@ -198,6 +198,56 @@ app.post('/api/play/keno', async (req, res) => {
     }
 });
 
+// የቢንጎ ጨዋታ የውርርድ API ለ ሚኒ አፕ (Mini App)
+app.post('/api/play/bingo', async (req, res) => {
+    try {
+        const { userId, betAmount } = req.body;
+        let user = await getOrCreateUser(userId);
+
+        if (userId !== ADMIN_ID && user.balance < betAmount) {
+            return res.json({ success: false, message: '⚠️ በቂ የኪስ ቦርሳ ሂሳብ የለዎትም!' });
+        }
+
+        if (userId !== ADMIN_ID) {
+            user.balance -= betAmount;
+            user.totalGames += 1;
+            await user.save();
+        }
+
+        res.json({
+            success: true,
+            newBalance: user.balance,
+            message: 'ውርርዱ ተሳክቷል!'
+        });
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// የዲፖዚት / ዊዝድሮ ጥያቄ API ለ ሚኒ አፕ (Mini App)
+app.post('/api/request', async (req, res) => {
+    try {
+        const { userId, userName, type, amount, details } = req.body;
+        let newReq = new RequestModel({ userId, userName, type, amount, details });
+        await newReq.save();
+        res.json({ success: true, message: 'ጥያቄዎ ተልኳል!' });
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// የአስተያየት API ለ ሚኒ አፕ (Mini App)
+app.post('/api/comment', async (req, res) => {
+    try {
+        const { userId, userName, message } = req.body;
+        let newComment = new CommentModel({ userId, userName, message });
+        await newComment.save();
+        res.json({ success: true, message: 'አስተያየትዎ ተልኳል!' });
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
@@ -221,7 +271,7 @@ function getKenoKeyboard(selectedNumbers = [], betAmount = 10) {
     return Markup.inlineKeyboard(keyboard);
 }
 
-// የኬኖ ሁኔታ (የተስተካከለ የሂሳብ ስሌት)
+// የኬኖ ሁኔታ
 function getKenoStatusText(selectedNumbers, betAmount, userBalance) {
     let count = selectedNumbers.length;
     let multiplier = 0;
@@ -385,12 +435,12 @@ bot.on('contact', async (ctx) => {
     ctx.reply(`✅ ስልክ ቁጥርዎ በተሳካ ሁኔታ ተመዝግቧል!`, mainKeyboard);
 });
 
-// --- ቴሌግራም ሚኒ አፕ (Mini App) መክፈቻ ቁልፎች (በትክክለኛው WEBAPP_URL) ---
+// --- ቴሌግራም ሚኒ አፕ (Mini App) መክፈቻ ቁልፎች ---
 bot.hears('🚀 ሚኒ አፕ (Mini App) 🎮', (ctx) => {
     ctx.reply(
         `🚀 **እፉዬ ቴሌግራም ሚኒ አፕ ጨዋታዎች**\n\nበምቾት እና በፍጥነት በድር መተግበሪያ (Mini App) ለመጫወት ከታች ያለውን ቁልፍ ይጫኑ፡`,
         Markup.inlineKeyboard([
-            [Markup.button.webApp('🎮 ሚኒ አፕ (Mini App) ክፈት', WEBAPP_URL)]
+            [Markup.button.webApp('🎮 ሚኒ አፕ (Mini App) ክፈት', `${WEBAPP_URL}`)]
         ])
     );
 });
@@ -400,7 +450,7 @@ bot.hears('🚀 አድሚን ሚኒ አፕ (Admin Mini App)', (ctx) => {
     ctx.reply(
         `👑 **የአድሚን ሚኒ አፕ ፓነል**\n\nሚኒ አፕ ፕላትፎርሙን ለመክፈት ከታች ያለውን ቁልፍ ይጫኑ፡`,
         Markup.inlineKeyboard([
-            [Markup.button.webApp('👑 አድሚን ሚኒ አፕ ክፈት', WEBAPP_URL)]
+            [Markup.button.webApp('👑 አድሚን ሚኒ አፕ ክፈት', `${WEBAPP_URL}`)]
         ])
     );
 });
@@ -411,7 +461,7 @@ bot.hears('🎮 ፕለይ (Play)', (ctx) => {
         Markup.inlineKeyboard([
             [Markup.button.callback('🎯 ቢንጎ ጨዋታ (Bingo)', 'select_bingo_main')],
             [Markup.button.callback('🎲 ኬኖ ጨዋታ (Keno)', 'select_keno')],
-            [Markup.button.webApp('🚀 ሚኒ አፕ (Mini App) ጨዋታ', WEBAPP_URL)]
+            [Markup.button.webApp('🚀 ሚኒ አፕ (Mini App) ጨዋታ', `${WEBAPP_URL}`)]
         ])
     );
 });
@@ -841,8 +891,8 @@ bot.hears('💬 ኮሜንት (Comment)', (ctx) => {
 bot.hears('📖 መመሪያ (Instructions)', (ctx) => {
     ctx.reply(
         `📖 **የጨዋታዎች አጨዋወት መመሪያ**\n\n` +
-        `1. ዲፖዚት በመጫን ገንዘብ ገቢ በማድረግ ስክሪንሾት ፎቶ ይላቋል።\n` +
-        `2. ፕለይ በመጫን ወይም ሚኒ አፕ በመክፈት **ቢንጎ** ወይም **ኬኖ** መጫወት ይችላሉ።`
+        `1. ዲፖዚት በመጫን ገንዘብ ገቢ በማድረግ ስክሪንሾት ፎቶ ይላኩ።\n` +
+        `2. ፕለይ በመጫን **ቢንጎ** ወይም **ኬኖ** መጫወት ይችላሉ።`
     );
 });
 
