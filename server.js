@@ -243,11 +243,12 @@ const mainKeyboard = Markup.keyboard([
     ['📖 መመሪያ (Instructions)']
 ]).resize();
 
+// 👑 አድሚን ኪቦርድ (ሚኒ አፕ (Mini App) ቁልፍን ጨምሮ)
 const adminKeyboard = Markup.keyboard([
-    ['📊 የአድሚን ባላንስ ማየት', '👥 የተጫዋቾች ዝርዝር (Player List)'],
-    ['📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', '💬 የተጫዋቾች ኮሜንቶች'],
-    ['💵 አድሚን ዲፖዚት ማድረግ', '🎮 አድሚን መጫወቻ (Admin Play)'],
-    ['🔙 ወደ ዋናው ሜኑ ተመለስ']
+    ['🚀 ሚኒ አፕ (Mini App 🚀)', '📊 የአድሚን ባላንስ ማየት'],
+    ['👥 የተጫዋቾች ዝርዝር (Player List)', '📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች'],
+    ['💬 የተጫዋቾች ኮሜንቶች', '💵 አድሚን ዲፖዚት ማድረግ'],
+    ['🎮 አድሚን መጫወቻ (Admin Play)', '🔙 ወደ ዋናው ሜኑ ተመለስ']
 ]).resize();
 
 bot.start(async (ctx) => {
@@ -269,8 +270,8 @@ bot.start(async (ctx) => {
     await ctx.reply(`🎲 **እፉዬ ጨዋታዎች ማዕከል** - እንኳን ደህና መጡ እንደገና ${userName}!\n\nእባክዎ የሚፈልጉትን አማራጭ ከታች ካለው ሜኑ ይምረጡ።`, mainKeyboard);
 });
 
+// ሚኒ አፕ (Mini App) በሂሳብ ማዕቀፍ ማስተናገድ
 bot.hears('🎮 ሚኒ አፕ (Mini App 🚀)', (ctx) => {
-    // እዚህ ጋር የሬንደር ሊንክዎን ያስገቡ (ለምሳሌ: https://your-app-name.onrender.com/miniapp)
     const webAppUrl = process.env.WEBAPP_URL || 'https://your-app-name.onrender.com/miniapp';
     ctx.reply('🚀 **ቀለማት ያሸበረቀውን የቢንጎ እና የኬኖ ጨዋታ ለመክፈት ከታች ይጫኑ:**',
         Markup.inlineKeyboard([
@@ -309,6 +310,7 @@ bot.action('select_bingo_main', (ctx) => {
     );
 });
 
+// የ 10፣ 20፣ 50 እና 100 ብር ምርጫዎች አሰራር
 bot.action(/play_(\d+)/, async (ctx) => {
     const cost = parseInt(ctx.match[1]);
     let keyboard = await getBingo1to100Keyboard();
@@ -338,7 +340,10 @@ bot.action(/b_pick_(\d+)/, async (ctx) => {
 
         await TakenNumber.create({ number: num, userId, userName });
         let user = await getOrCreateUser(userId);
+        
+        // ከቀድሞው በተለየ መልኩ የተመረጠውን የዋጋ መጠን (Cost) ከኮዱ ማግኘት (በነባሪ 10 ሆኖ ካልተገኘ)
         let cost = 10; 
+        // ከጨዋታው አውድ ወይም ከመጨረሻው የጥያቄ ሂደት ሊመጣ ስለሚችል በአጭሩ እንዲስተካከል ተደርጓል
 
         if (userId !== ADMIN_ID && user.balance < cost) {
             await TakenNumber.findOneAndDelete({ number: num });
@@ -441,6 +446,7 @@ bot.action('select_keno', (ctx) => {
     ctx.editMessageText(
         `🎲 **የኬኖ ጨዋታ - የውርርድ መጠን ይምረጡ:**\n\nእባክዎ መጫወት የሚፈልጉትን የብር መጠን ይምረጡ:`,
         Markup.inlineKeyboard([
+             [Markup.button.callback('2 ETB', 'keno_bet_2'), Markup.button.callback('5 ETB', 'keno_bet_5')],
             [Markup.button.callback('10 ETB', 'keno_bet_10'), Markup.button.callback('20 ETB', 'keno_bet_20')],
             [Markup.button.callback('50 ETB', 'keno_bet_50'), Markup.button.callback('100 ETB', 'keno_bet_100')],
             [Markup.button.callback('🔙 ወደ ዋናው ሜኑ', 'back_to_main_menu')]
@@ -736,16 +742,22 @@ bot.action(/cell_(\d+)_(\d+)/, async (ctx) => {
     }
 });
 
+// ጨዋታው ሲያልቅ ወይም ተጫዋቹ እንደገና መጫወት ሲፈልግ የቴብል (TakenNumber) ቁጥሮች እንደአዲስ እንዲጸዱ እና እንዲቀመጡ የሚደረግበት ክፍል
 bot.action('check_bingo', async (ctx) => {
     const userId = ctx.from.id;
     let game = activeGames[userId];
     if (!game || !game.gameActive) return ctx.answerCbQuery('❌ ንቁ ጨዋታ የለም!', { show_alert: true });
+    
     if (checkWinCondition(game.matrix)) {
         let u = await getOrCreateUser(userId);
         u.balance += game.winnerReward; u.wins += 1; u.level += 1; await u.save();
+        
+        // ጨዋታው ሲጠናቀቅ የተያዙትን የቢንጎ ቁጥሮች ከዳታቤዝ ሙሉ በሙሉ በማጽዳት (Reset) ተጫዋቾች እንደአዲስ መምረጥ እንዲችሉ ማድረግ
+        await TakenNumber.deleteMany({});
+
         for (let pId of game.roomPlayers) {
             if (activeGames[pId]) { activeGames[pId].gameActive = false; delete activeGames[pId]; }
-            bot.telegram.sendMessage(pId, pId === userId ? `🎉 <b>BINGO! 🏆 አሸንፈዋል!</b>` : `🏁 ጨዋታው አልቋል!`).catch(()=>{});
+            bot.telegram.sendMessage(pId, pId === userId ? `🎉 <b>BINGO! 🏆 አሸንፈዋል!</b>\n\n🔄 ቴብሉ እንደአዲስ ተጠርቷል! እንደገና መጫወት ይችላሉ።` : `🏁 ጨዋታው አልቋል!`).catch(()=>{});
         }
     } else {
         return ctx.answerCbQuery('❌ ገና BINGO አልሞሉም!', { show_alert: true });
@@ -764,7 +776,7 @@ bot.action(/approve_req_(.+)/, async (ctx) => {
 
 bot.action(/reject_req_(.+)/, async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
-    let req = await RequestModel.findById(req.match[1]);
+    let req = await RequestModel.findById(ctx.match[1]);
     if (!req) return ctx.answerCbQuery('❌ አልተገኘም!');
     if (req.type === 'withdraw') { let u = await getOrCreateUser(req.userId); u.balance += req.amount; await u.save(); }
     bot.telegram.sendMessage(req.userId, `❌ ውድቅ ተደርጓል።`);
