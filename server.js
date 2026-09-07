@@ -77,7 +77,7 @@ if (!TOKEN) {
 }
 
 // 🌐 የቴሌግራም ሚኒ አፕ (Mini App) ዌብ አድራሻ ከ Render Environment Variable የሚነበብበት
-const WEBAPP_URL = process.env.WEBAPP_URL || 'https://your-render-app-url.onrender.com';
+const WEBAPP_URL = process.env.WEBAPP_URL || 'https://telegram-bot-xer2.onrender.com/miniapp';
 
 const bot = new Telegraf(TOKEN);
 const ADMIN_ID = 380035906;
