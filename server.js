@@ -272,7 +272,7 @@ bot.start(async (ctx) => {
 
 // ሚኒ አፕ (Mini App) በሂሳብ ማዕቀፍ ማስተናገድ
 bot.hears('🎮 ሚኒ አፕ (Mini App 🚀)', (ctx) => {
-    const webAppUrl = process.env.WEBAPP_URL || 'https://telegram-bot-xer2.onrender.com/miniapp';
+    const webAppUrl = process.env.WEBAPP_URL || '[https://telegram-bot-xer2.onrender.com/miniapp](https://telegram-bot-xer2.onrender.com/miniapp)';
     ctx.reply('🚀 **ቀለማት ያሸበረቀውን የቢንጎ እና የኬኖ ጨዋታ ለመክፈት ከታች ይጫኑ:**',
         Markup.inlineKeyboard([
             [Markup.button.webApp('✨ የሚኒ አፕ ጨዋታ ክፈት (Open Mini App)', webAppUrl)]
