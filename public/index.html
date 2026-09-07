@@ -136,7 +136,6 @@
         const tg = window.Telegram.WebApp;
         tg.expand();
 
-        // ዩዘር መረጃ ከቴሌግራም መውሰድ (ካልተገኘ በናሙና ID ይሞላል)
         const userId = tg.initDataUnsafe?.user?.id || 380035906;
         const userName = tg.initDataUnsafe?.user?.first_name || 'ተጫዋች';
         
@@ -211,12 +210,10 @@
                 return;
             }
 
-            // 3 Seconds interval draw animation logic
             let drawns = data.drawnNumbers;
             let currentIdx = 0;
             document.getElementById('keno-result').innerText = "🎲 ኬኖ ጨዋታ በሂደት ላይ... ቁጥሮች እየወጡ ነው";
             
-            // Clear previous highlights
             document.querySelectorAll('.num-btn').forEach(b => b.classList.remove('drawn'));
 
             let drawInterval = setInterval(() => {
@@ -236,7 +233,7 @@
                         document.getElementById('keno-result').innerHTML = `<span style="color:#ef4444;">❌ ተሸንፈዋል! ድጋሚ ይሞክሩ።</span>`;
                     }
                 }
-            }, 3000); // በየ 3 ሰከንድ የሚጠራበት ሎጂክ
+            }, 3000);
         }
 
         // --- BINGO LOGIC ---
@@ -245,7 +242,6 @@
             let boardEl = document.getElementById('bingo-board');
             boardEl.innerHTML = '';
             
-            // Headers B I N G O
             ['B','I','N','G','O'].forEach(char => {
                 let div = document.createElement('div');
                 div.className = 'bingo-cell bingo-header-cell';
@@ -307,19 +303,65 @@
             } else {
                 document.getElementById('bingo-result').innerHTML = `<span style="color:#ef4444;">❌ ገና አልሞሉም! ተሸንፈዋል</span>`;
             }
-            generateBingoBoard(); // አዲስ ካርድ ማስተካከል
+            generateBingoBoard();
         }
 
-        // --- WALLET & COMMENT PLACEHOLDERS ---
-        function submitRequest() {
-            alert('✅ የግብይት ጥያቄዎ በተሳካ ሁኔታ ተልኳል!');
+        // --- WALLET (DEPOSIT / WITHDRAW) API ---
+        async function submitRequest() {
+            let type = document.getElementById('req-type').value;
+            let amount = parseFloat(document.getElementById('req-amount').value);
+            let details = document.getElementById('req-details').value;
+
+            if(!amount || !details) {
+                alert('⚠️ እባክዎ የብር መጠን እና የባንክ/ስልክ ዝርዝር በትክክል ይሙሉ!');
+                return;
+            }
+
+            try {
+                let res = await fetch('/api/request', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ userId, userName, type, amount, details })
+                });
+                let data = await res.json();
+                if(data.success) {
+                    document.getElementById('wallet-result').innerHTML = `<span style="color:#4ade80;">✅ ጥያቄዎ ለአድሚን ተልኳል!</span>`;
+                    document.getElementById('req-amount').value = '';
+                    document.getElementById('req-details').value = '';
+                } else {
+                    alert(data.message || 'ስህተት ተፈጥሯል');
+                }
+            } catch(e) {
+                console.error(e);
+                alert('ሰርቨር ጋር መገናኘት አልተቻለም');
+            }
         }
 
-        function sendComment() {
-            let msg = document.getElementById('comment-msg').value;
-            if(!msg) { alert('እባክዎ መልእክት ይጻፉ'); return; }
-            alert('✅ አስተያየትዎ ለአድሚን ተልኳል!');
-            document.getElementById('comment-msg').value = '';
+        // --- COMMENT API ---
+        async function sendComment() {
+            let message = document.getElementById('comment-msg').value;
+            if(!message) {
+                alert('⚠️ እባክዎ አስተያየትዎን ይጻፉ!');
+                return;
+            }
+
+            try {
+                let res = await fetch('/api/comment', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ userId, userName, message })
+                });
+                let data = await res.json();
+                if(data.success) {
+                    document.getElementById('comment-result').innerHTML = `<span style="color:#4ade80;">✅ አስተያየትዎ ለአድሚን ተልኳል!</span>`;
+                    document.getElementById('comment-msg').value = '';
+                } else {
+                    alert(data.message || 'ስህተት ተፈጥሯል');
+                }
+            } catch(e) {
+                console.error(e);
+                alert('ሰርቨር ጋር መገናኘት አልተቻለም');
+            }
         }
     </script>
 </body>
