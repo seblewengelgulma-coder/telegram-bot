@@ -295,7 +295,10 @@ bot.hears('🎮 ፕለይ (Play)', (ctx) => {
     );
 });
 
-bot.action('select_bingo_main', (ctx) => {
+bot.action('select_bingo_main', async (ctx) => {
+    // ተጫዋቹ ወደ ቢንጎ ዋና ማኑ ሲመለስ ቀደም ሲል ይዞት የነበረ ቁጥር ካለ እናጸዳለን (Refresh እንዲሆን)
+    await TakenNumber.deleteMany({ userId: ctx.from.id });
+
     ctx.editMessageText(
         `🎯 **የቢንጎ ጨዋታ - የውርርድ መጠን ይምረጡ:**\n\nእባክዎ መጫወት የሚፈልጉትን የብር መጠን ይምረጡ:`,
         Markup.inlineKeyboard([
@@ -307,6 +310,10 @@ bot.action('select_bingo_main', (ctx) => {
 });
 
 bot.action(/play_(\d+)/, async (ctx) => {
+    const userId = ctx.from.id;
+    // ጨዋታ ከመጀመሩ በፊት የዚህ ተጫዋች አሮጌ የተያዙ ቁጥሮች ካሉ እናጸዳለን
+    await TakenNumber.deleteMany({ userId });
+
     const cost = parseInt(ctx.match[1]);
     let keyboard = await getBingo1to100Keyboard();
     ctx.editMessageText(
@@ -332,6 +339,9 @@ bot.action(/b_pick_(\d+)/, async (ctx) => {
             await ctx.editMessageText(`⚠️ ይህ ቁጥር አሁን በሌላ ተጫዋች ተይዟል!`, updatedKb);
             return ctx.answerCbQuery(`❌ ቁጥሩ ተይዟል!`, { show_alert: true });
         }
+
+        // ተጫዋቹ ከዚህ በፊት የመረጠው ሌላ ቁጥር ካለ እናስወግዳለን (በአንድ ጊዜ 1 ቁጥር ብቻ መምረጥ እንዲችል)
+        await TakenNumber.deleteMany({ userId });
 
         await TakenNumber.create({ number: num, userId, userName });
 
@@ -662,7 +672,10 @@ bot.action('start_keno_draw', async (ctx) => {
     }, 3000);
 });
 
-bot.action('back_to_main_menu', (ctx) => {
+bot.action('back_to_main_menu', async (ctx) => {
+    // ወደ ዋናው ሜኑ ሲመለስ የያዛቸውን የቢንጎ ሰሌዳ ቁጥሮች በሙሉ እናጸዳለን
+    await TakenNumber.deleteMany({ userId: ctx.from.id });
+
     ctx.editMessageText(`🎲 **እፉዬ ጨዋታዎች ማዕከል**\n\nእባክዎ የሚፈልጉትን ጨዋታ ይምረጡ፦`, Markup.inlineKeyboard([
         [Markup.button.callback('🎯 ቢንጎ ጨዋታ (Bingo)', 'select_bingo_main')],
         [Markup.button.callback('🎲 ኬኖ ጨዋታ (Keno)', 'select_keno')]
