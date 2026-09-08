@@ -372,7 +372,7 @@ function runBingoQueue(cost) {
 
         if (room.length < 2) {
             for (let p of room) {
-                // ቁጥሮቹን ከ TakenNumber መሰረዝ (ተጫዋች ሲቋረጥ)
+                // ቁጥሮቹን ከ TakenNumber ማጽዳት (ጨዋታው ሳይጀምር ሲቀር)
                 await TakenNumber.deleteMany({ userId: p.userId });
 
                 if (p.userId !== ADMIN_ID) {
@@ -596,7 +596,7 @@ bot.action('start_keno_draw', async (ctx) => {
                 winAmount = Math.round(betAmount + (betAmount * multiplier));
             } 
             else if (selectedCount === 4 && matchCount === 2) {
-                let multiplier = 1.05; 
+                let multiplier = 1.02; 
                 winAmount = Math.round(betAmount + (betAmount * multiplier));
             }
             else if (selectedCount === 3 && matchCount === 2) {
@@ -846,8 +846,8 @@ bot.action('check_bingo', async (ctx) => {
         winnerUser.level += 1; 
         await winnerUser.save();
 
+        // ጨዋታው ሲጠናቀቅ የሁሉም ተጫዋቾች የተያዙ ቁጥሮች ከዳታቤዝ ይሰረዛሉ
         for (let pId of game.roomPlayers) {
-            // ጨዋታው ሲጠናቀቅ የተያዙትን የቢንጎ ቁጥሮች ከዳታቤዝ እናስወግዳለን (Clean up TakenNumbers)
             await TakenNumber.deleteMany({ userId: pId });
 
             if (activeGames[pId]) {
@@ -877,7 +877,6 @@ bot.action(/approve_req_(.+)/, async (ctx) => {
     }
 
     await RequestModel.findByIdAndDelete(reqId);
-    // አድሚኑ በተኑን ሲነካ "✅ ጥያቄው ጸድቋል!" የሚለውን መልዕክት እንዲያሳይ ተደርጓል
     ctx.editMessageText(`✅ ጥያቄው ጸድቋል!`);
 });
 
@@ -895,7 +894,6 @@ bot.action(/reject_req_(.+)/, async (ctx) => {
 
     bot.telegram.sendMessage(req.userId, `❌ የ ${req.type.toUpperCase()} ጥያቄዎ ውድቅ ተደርጓል።`).catch(()=>{});
     await RequestModel.findByIdAndDelete(reqId);
-    // አድሚኑ በተኑን ሲነካ "❌ ጥያቄው ውድቅ ተደርጓል!" የሚለውን መልዕክት እንዲያሳይ ተደርጓል
     ctx.editMessageText(`❌ ጥያቄው ውድቅ ተደርጓል!`);
 });
 
@@ -1046,4 +1044,4 @@ bot.on('text', async (ctx) => {
 });
 
 bot.launch();
-console.log('🤖 Bot is running smoothly with fixed Bingo taken numbers & admin action messages!');
+console.log('🤖 Bot is running smoothly with clean Bingo taken numbers!');
