@@ -7,6 +7,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
+app.use(express.static('public')); // የፊት ገጽ (HTML) ፋይሎች እንዲነበቡ
 
 // --- 1. የሞንጎዲቢ ግንኙነት (MongoDB Connection) ---
 const MONGO_URI = process.env.MONGO_URI;
@@ -77,7 +78,6 @@ if (!TOKEN) {
 const bot = new Telegraf(TOKEN);
 const ADMIN_ID = 380035906;
 
-// የድር መተግበሪያዎ (Web App) ዩአርኤል (Render ላይ የተጫነበት ሊንክዎ)
 const WEB_APP_URL = process.env.WEB_APP_URL || 'https://telegram-bot-xer2.onrender.com';
 
 const ADMIN_PAYMENT_INFO = `🏦 **የአድሚን የክፍያ አካውንቶች (ለዲፖዚት)**\n\n` +
@@ -98,10 +98,185 @@ async function getOrCreateUser(userId, userName = 'ተጫዋች') {
     return user;
 }
 
-// 🌐 ዌብ ዩአርኤል (Web URL / Web Server Endpoint)
+// ========================================================
+// --- 🌐 ዌብ አፕ ራውቶች እና ኤፒአይዎች (FRONTEND APIs) ---
+// ========================================================
+
 app.get('/', (req, res) => {
     res.sendFile(__dirname + '/public/index.html');
 });
+
+// 1. የተጠቃሚውን መረጃ (ባላንስ እና ሌቭል) ለሚኒ-አፑ የሚልክ ኤፒአይ
+app.get('/api/user', async (req, res) => {
+    try {
+        const userId = parseInt(req.query.userId);
+        const userName = req.query.userName || 'ተጫዋች';
+        if (!userId) return res.status(400).json({ success: false, error: 'User ID is required' });
+
+        let user = await User.findOne({ userId });
+        if (!user) {
+            user = new User({ userId, userName, balance: 0 });
+            await user.save();
+        }
+
+        res.json({
+            success: true,
+            userName: user.userName,
+            balance: user.balance,
+            level: user.level || 1,
+            totalGames: user.totalGames || 0,
+            wins: user.wins || 0,
+            losses: user.losses || 0,
+            phone: user.phone || ''
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// 2. የተያዙ የቢንጎ ቁጥሮችን ለሚኒ-አፑ የሚልክ ኤፒአይ
+app.get('/api/bingo/taken-numbers', async (req, res) => {
+    try {
+        let takenDocs = await TakenNumber.find({});
+        let takenNumbers = takenDocs.map(doc => doc.number);
+        res.json({ success: true, takenNumbers });
+    } catch (e) {
+        res.json({ success: true, takenNumbers: [] });
+    }
+});
+
+// 3. በዌብ አፕ በኩል የቢንጎ ቁጥር ሲመርጡ የሚሰራ ኤፒአይ
+app.post('/api/bingo/pick', async (req, res) => {
+    try {
+        const { userId, userName, number, cost } = req.body;
+        let existing = await TakenNumber.findOne({ number });
+        if (existing) {
+            return res.json({ success: false, error: 'ይህ ቁጥር ተይዟል!' });
+        }
+
+        let user = await User.findOne({ userId });
+        if (userId !== ADMIN_ID && (!user || user.balance < cost)) {
+            return res.json({ success: false, error: 'በቂ ባላንስ የለዎትም!' });
+        }
+
+        if (userId !== ADMIN_ID) {
+            user.balance -= cost;
+            user.totalGames += 1;
+            await user.save();
+        }
+
+        await TakenNumber.create({ number, userId, userName: userName || 'ተጫዋች' });
+
+        let matrix = generateRandomBingoCard();
+        let availableNumbers = Array.from({ length: 75 }, (_, i) => i + 1);
+        let firstDrawn = availableNumbers[Math.floor(Math.random() * availableNumbers.length)];
+
+        res.json({
+            success: true,
+            matrix,
+            totalPool: cost * 2,
+            winnerReward: Math.round(cost * 2 * 0.9),
+            firstDrawn,
+            drawnHistory: [firstDrawn]
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// 4. በዌብ አፕ የቢንጎ ዊን ማረጋገጫ ኤፒአይ
+app.post('/api/bingo/check-win', async (req, res) => {
+    try {
+        const { userId, matrix } = req.body;
+        if (checkWinCondition(matrix)) {
+            let user = await User.findOne({ userId });
+            let reward = 18; // ነባሪ የድል ሽልማት
+            if (user && userId !== ADMIN_ID) {
+                user.balance += reward;
+                user.wins += 1;
+                user.level += 1;
+                await user.save();
+            }
+            res.json({ success: true, message: `🏆 እንኳን ደስ አሎት! BINGO ብለዋል! ሽልማት: ETB ${reward}` });
+        } else {
+            res.json({ success: false, message: '❌ ገና BINGO አልሞሉም!' });
+        }
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// 5. በዌብ አፕ በኩል የኬኖ ጨዋታን የሚያስተናግድ ኤፒአይ
+app.post('/api/play-keno', async (req, res) => {
+    try {
+        const { userId, betAmount, numbers } = req.body;
+        let user = await User.findOne({ userId });
+        if (!user && userId !== ADMIN_ID) return res.json({ success: false, error: 'ተጠቃሚው አልተገኘም' });
+
+        if (userId !== ADMIN_ID && user.balance < betAmount) {
+            return res.json({ success: false, error: 'በቂ ባላንስ የለዎትም!' });
+        }
+
+        if (userId !== ADMIN_ID) {
+            user.balance -= betAmount;
+            user.totalGames += 1;
+        }
+
+        let allNums = Array.from({ length: 80 }, (_, i) => i + 1);
+        let drawnNumbers = [];
+        while (drawnNumbers.length < 20) {
+            let rIdx = Math.floor(Math.random() * allNums.length);
+            drawnNumbers.push(allNums.splice(rIdx, 1)[0]);
+        }
+
+        let matches = numbers.filter(n => drawnNumbers.includes(n));
+        let matchCount = matches.length;
+        let winAmount = 0;
+        let selectedCount = numbers.length;
+
+        if (matchCount === selectedCount) {
+            let multiplier = 0;
+            if (selectedCount === 10) multiplier = 20;
+            else if (selectedCount === 9) multiplier = 10;
+            else if (selectedCount === 8) multiplier = 6;
+            else if (selectedCount === 7) multiplier = 3.5;
+            else if (selectedCount === 6) multiplier = 2;
+            else if (selectedCount === 5) multiplier = 1.2;
+            else if (selectedCount === 4) multiplier = 0.8;
+            else if (selectedCount === 3) multiplier = 0.5;
+            else if (selectedCount === 2) multiplier = 0.3;
+            else if (selectedCount === 1) multiplier = 0.2;
+
+            winAmount = Math.round(betAmount + (betAmount * multiplier));
+        } else if (selectedCount === 4 && matchCount === 2) {
+            winAmount = Math.round(betAmount + (betAmount * 0.2));
+        } else if (selectedCount === 3 && matchCount === 2) {
+            winAmount = Math.round(betAmount + (betAmount * 0.5));
+        } else if (selectedCount === 2 && matchCount === 1) {
+            winAmount = betAmount; // Refund
+        }
+
+        if (winAmount > 0 && userId !== ADMIN_ID) {
+            user.balance += winAmount;
+            user.wins += 1;
+        } else if (winAmount === 0 && userId !== ADMIN_ID) {
+            user.losses += 1;
+        }
+
+        if (userId !== ADMIN_ID) await user.save();
+
+        res.json({
+            success: true,
+            message: winAmount > 0 ? 'አሸንፈዋል!' : 'ተሸንፈዋል!',
+            drawnNumbers,
+            winAmount
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// ========================================================
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
@@ -126,7 +301,6 @@ function getKenoKeyboard(selectedNumbers = [], betAmount = 10) {
     return Markup.inlineKeyboard(keyboard);
 }
 
-// የኬኖ ሁኔታ
 function getKenoStatusText(selectedNumbers, betAmount, userBalance) {
     let count = selectedNumbers.length;
     let multiplier = 0;
@@ -158,7 +332,6 @@ function getKenoStatusText(selectedNumbers, betAmount, userBalance) {
            `አካውንት ባላንስ: **ETB ${userBalance}**`;
 }
 
-// የቢንጎ 1-100 ቁጥሮች ሰሌዳ
 async function getBingo1to100Keyboard() {
     let keyboard = [];
     let row = [];
@@ -291,7 +464,6 @@ bot.start(async (ctx) => {
     await ctx.reply(' ዋናው ሜኑ:', mainKeyboard);
 });
 
-// የቴሌግራም ሰማይ ሜኑ ቁልፍ (Menu Button) ማዋቀር (ለተጠቃሚዎች ሁሉ በቻቱ አጠገብ እንዲታይ)
 bot.telegram.setChatMenuButton({
     menuButton: {
         type: 'web_app',
