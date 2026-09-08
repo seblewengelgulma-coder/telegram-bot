@@ -3,526 +3,387 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>እፉዬ ቴሌግራም ሚኒ አፕ ጨዋታዎች</title>
+    <title>እፉዬ ቢንጎ እና ኬኖ ማዕከል</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { background: #0f172a; color: #fff; padding: 10px; padding-bottom: 70px; }
+        :root {
+            --bg-color: var(--tg-theme-bg-color, #0f172a);
+            --text-color: var(--tg-theme-text-color, #f8fafc);
+            --hint-color: var(--tg-theme-hint-color, #94a3b8);
+            --button-color: var(--tg-theme-button-color, #4f46e5);
+            --button-text-color: var(--tg-theme-button-text-color, #ffffff);
+            --card-bg: #1e293b;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container { width: 100%; max-width: 480px; }
+        .header {
+            background: var(--card-bg);
+            padding: 12px 15px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .balance-box { font-size: 16px; font-weight: bold; color: #38bdf8; }
+        .card {
+            background: var(--card-bg);
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .btn {
+            background-color: var(--button-color);
+            color: var(--button-text-color);
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: bold;
+            width: 100%;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .btn:active { opacity: 0.8; }
+        .grid-80 {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        .grid-btn {
+            background: #334155;
+            color: white;
+            border: none;
+            padding: 8px 0;
+            font-size: 11px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .grid-btn.taken { background: #dc2626; cursor: not-allowed; }
+        .grid-btn.selected { background: #22c55e !important; }
         
-        /* Header & Profile */
-        .header { background: #1e293b; padding: 12px 15px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-        .user-info h4 { font-size: 16px; color: #38bdf8; }
-        .user-info p { font-size: 12px; color: #94a3b8; }
-        .balance-badge { background: #334155; padding: 6px 14px; border-radius: 20px; font-weight: bold; color: #4ade80; border: 1px solid #475569; }
+        /* Bingo 5x5 Board */
+        .bingo-board {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 5px;
+            margin-top: 15px;
+        }
+        .bingo-header-cell {
+            background: #0f172a;
+            color: #38bdf8;
+            font-weight: bold;
+            text-align: center;
+            padding: 8px 0;
+            border-radius: 4px;
+        }
+        .bingo-cell {
+            background: #334155;
+            color: white;
+            border: none;
+            aspect-ratio: 1;
+            font-size: 13px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .bingo-cell.marked { background: #22c55e !important; }
+        .bingo-cell.free { background: #eab308; color: black; }
 
-        /* Navigation Tabs */
-        .nav-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-bottom: 15px; }
-        .tab-btn { background: #1e293b; border: none; color: #94a3b8; padding: 10px 5px; border-radius: 8px; cursor: pointer; font-size: 11px; font-weight: bold; transition: 0.3s; text-align: center; }
-        .tab-btn.active { background: #2563eb; color: white; }
-
-        /* Sections */
-        .section { display: none; background: #1e293b; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-        .section.active { display: block; }
-
-        h3 { margin-bottom: 12px; font-size: 16px; color: #f8fafc; border-bottom: 2px solid #334155; padding-bottom: 8px; }
-
-        /* Keno Game Styles */
-        .bet-selector { margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; background: #334155; padding: 8px 12px; border-radius: 8px; }
-        .bet-selector select { background: #0f172a; color: white; border: 1px solid #475569; padding: 5px 10px; border-radius: 5px; }
-        .grid-80 { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; margin-bottom: 15px; }
-        .num-btn { background: #334155; border: none; color: white; padding: 8px 0; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; transition: 0.2s; position: relative; }
-        .num-btn.selected { background: #22c55e !important; transform: scale(1.05); }
-        .num-btn.drawn { background: #ef4444 !important; }
-        .num-btn.matched { background: #eab308 !important; color: #000; }
-
-        /* Bingo Game Styles */
-        .bingo-lobby { background: #0f172a; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 15px; border: 1px solid #334155; }
-        .called-history-box { background: #0f172a; color: #fff; padding: 12px; border-radius: 8px; margin-bottom: 12px; min-height: 50px; font-size: 15px; font-weight: bold; line-height: 1.6; text-align: left; border: 1px solid #334155; }
-        .bingo-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; max-width: 320px; margin: 15px auto; }
-        .bingo-cell { background: #334155; border: 1px solid #475569; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-weight: bold; border-radius: 6px; cursor: pointer; font-size: 14px; color: #fff; transition: 0.2s; }
-        .bingo-cell.marked { background: #16a34a; color: white; border-color: #22c55e; }
-        .bingo-header-cell { background: #1e293b; color: #38bdf8; font-weight: bold; border: none; font-size: 15px; }
-
-        /* General Buttons & Forms */
-        .btn-main { background: #2563eb; color: white; border: none; padding: 12px; border-radius: 8px; width: 100%; font-size: 14px; font-weight: bold; cursor: pointer; margin-top: 10px; transition: 0.2s; }
-        .btn-main:active { transform: scale(0.98); }
-        .btn-main:disabled { background: #475569; cursor: not-allowed; }
-        .form-group { margin-bottom: 12px; text-align: left; }
-        .form-group label { display: block; font-size: 12px; color: #94a3b8; margin-bottom: 5px; }
-        .form-control { width: 100%; padding: 10px; background: #0f172a; border: 1px solid #334155; color: white; border-radius: 6px; font-size: 14px; }
-        .result-box { margin-top: 12px; padding: 10px; border-radius: 6px; background: #0f172a; font-size: 13px; text-align: center; min-height: 40px; display: flex; align-items: center; justify-content: center; }
+        .payout-table {
+            background: #0f172a;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            margin-bottom: 10px;
+            color: #cbd5e1;
+        }
+        .hidden { display: none !important; }
+        select {
+            width: 100%;
+            padding: 10px;
+            margin-top: 8px;
+            margin-bottom: 15px;
+            background: #0f172a;
+            border: 1px solid #475569;
+            color: white;
+            border-radius: 8px;
+            box-sizing: border-box;
+        }
+        h2, h3 { margin-top: 0; }
     </style>
 </head>
 <body>
 
+<div class="container">
+    <!-- ሄደር -->
     <div class="header">
-        <div class="user-info">
-            <h4 id="u-name">ተጫዋች</h4>
-            <p>ID: <span id="u-id">---</span></p>
+        <div>
+            <h3 id="username" style="margin:0;">ተጫዋች</h3>
+            <small id="user-level" style="color: var(--hint-color);">ሌቭል: 1</small>
         </div>
-        <div class="balance-badge">💰 <span id="u-balance">0</span> ETB</div>
+        <div class="balance-box" id="user-balance">ETB 0</div>
     </div>
 
-    <div class="nav-tabs">
-        <button class="tab-btn active" onclick="switchTab('keno', this)">🎲 ኬኖ</button>
-        <button class="tab-btn" onclick="switchTab('bingo', this)">🎯 ቢንጎ</button>
-        <button class="tab-btn" onclick="switchTab('wallet', this)">💳 የገንዘብ ግብይት</button>
-        <button class="tab-btn" onclick="switchTab('comment', this)">💬 አስተያየት</button>
+    <!-- ዋና ሜኑ -->
+    <div id="main-menu" class="card">
+        <h2>🎮 እፉዬ ጨዋታዎች ማዕከል</h2>
+        <button class="btn" onclick="showSection('bingo-menu-section')">🎯 ቢንጎ ጨዋታ (Bingo)</button>
+        <button class="btn" onclick="openKenoMenu()">🎲 ኬኖ ጨዋታ (Keno)</button>
+        <button class="btn" style="background:#64748b;" onclick="showSection('profile-section')">👤 ፕሮፋይል</button>
+        <div style="background:#0f172a; padding:10px; border-radius:8px; font-size:12px; margin-top:15px; text-align:center; color:#38bdf8;">
+            💡 ዲፖዚት እና ዊዝድሮ ለማድረግ እባክዎ ወደ <b>ቴሌግራም ቦቱ</b> ይመለሱ።
+        </div>
     </div>
 
-    <!-- 1. KENO SECTION -->
-    <div id="keno-section" class="section active">
-        <h3>🎲 የኬኖ ጨዋታ (ከ 1 እስከ 10 ቁጥሮች ይምረጡ)</h3>
-        <div class="bet-selector">
-            <span>የውርርድ መጠን:</span>
-            <select id="keno-bet-amount" onchange="updateKenoPotentialWin()">
-                <option value="10">10 ETB</option>
-                <option value="20">20 ETB</option>
-                <option value="50">50 ETB</option>
-                <option value="100">100 ETB</option>
-            </select>
+    <!-- የቢንጎ መጠን መምረጫ -->
+    <div id="bingo-menu-section" class="card hidden">
+        <h2>🎯 ቢንጎ የውርርድ መጠን ይምረጡ</h2>
+        <div class="payout-table">
+            📌 <b>የቢንጎ አከፋፈል ሎጂክ:</b><br>
+            • አጠቃላይ ከሚሰበሰበው ፖል (Total Pool) ላይ <b>10% ለአድሚን ኮሚሽን</b> ይቀነሳል።<br>
+            •ቀሪው <b>90% ሙሉ በሙሉ ለአሸናፊው</b> ይገባል!
         </div>
-        <div style="font-size: 12px; color: #38bdf8; margin-bottom: 8px; text-align: center;" id="keno-potential-view">የሚጠበቀው ሽልማት: 0 ETB</div>
-        <div class="grid-80" id="keno-grid"></div>
-        <button class="btn-main" id="keno-btn" onclick="startKenoDraw()">🎲 ኬኖ ድሮ ጀምር (Draw)</button>
-        <div class="result-box" id="keno-result">ቁጥሮችን ይምረጡና ጨዋታ ይጀምሩ</div>
+        <button class="btn" onclick="selectBingoCost(10)">Play 10 ETB</button>
+        <button class="btn" onclick="selectBingoCost(20)">Play 20 ETB</button>
+        <button class="btn" onclick="selectBingoCost(50)">Play 50 ETB</button>
+        <button class="btn" style="background:#64748b;" onclick="showSection('main-menu')">🔙 ተመለስ</button>
     </div>
 
-    <!-- 2. BINGO SECTION -->
-    <div id="bingo-section" class="section">
-        <h3>🎯 የቢንጎ የውርርድ ክፍፍል እና የቀጥታ ጨዋታ</h3>
-        <div id="bingo-setup-box" class="bingo-lobby">
-            <div class="form-group" style="margin-bottom: 8px;">
-                <label>የቢንጎ ውርርድ መጠን ይምረጡ:</label>
-                <select class="form-control" id="bingo-stake">
-                    <option value="10">10 ETB (ክፍል 10)</option>
-                    <option value="20">20 ETB (ክፍል 20)</option>
-                    <option value="50">50 ETB (ክፍል 50)</option>
-                    <option value="100">100 ETB (ክፍል 100)</option>
-                </select>
-            </div>
-            <button class="btn-main" onclick="joinBingoLobby()" style="background: #16a34a;">🎮 ጨዋታውን ተቀላቀል (Join)</button>
-        </div>
-
-        <div id="bingo-live-box" style="display: none;">
-            <div class="bingo-lobby">
-                <div style="font-size: 13px; color: #facc15; font-weight: bold;" id="bingo-status-text">ተጫዋቾችን በመጠባበቅ ላይ...</div>
-                <div style="font-size: 20px; font-weight: bold; color: #38bdf8; margin: 8px 0;" id="bingo-timer">ቆጣሪ: 30 ሰከንድ</div>
-            </div>
-
-            <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">ያለፉት የተጠሩ ቁጥሮች ታሪክ:</div>
-            <div class="called-history-box" id="called-history-box">📢 የወጡ ቁጥሮች እዚህ ይታያሉ...</div>
-            <div class="bingo-grid" id="bingo-board"></div>
-            <button class="btn-main" id="check-bingo-btn" onclick="checkBingoWin()" style="background: #2563eb;" disabled>🎯 BINGO አረጋግጥ</button>
-        </div>
-        <div class="result-box" id="bingo-result">የውርርድ መጠን በመምረጥ ጨዋታውን ይቀላቀሉ</div>
+    <!-- የቢንጎ 1-100 ቁጥር መምረጫ -->
+    <div id="bingo-pick-section" class="card hidden">
+        <h2>🎯 ከ 1 እስከ 100 ቁጥር ይምረጡ</h2>
+        <div class="grid-80" id="bingo-100-grid"></div>
+        <button class="btn" style="background:#64748b; margin-top:15px;" onclick="showSection('bingo-menu-section')">🔙 ተመለስ</button>
     </div>
 
-    <!-- 3. WALLET SECTION -->
-    <div id="wallet-section" class="section">
-        <h3>💳 የዲፖዚት እና ዊዝድሮ ጥያቄ</h3>
-        <div class="form-group">
-            <label>የግብይት አይነት ይምረጡ:</label>
-            <select class="form-control" id="req-type">
-                <option value="deposit">ዲፖዚት (Deposit - ገንዘብ ማስገባት)</option>
-                <option value="withdraw">ዊዝድሮ (Withdraw - ገንዘብ ማውጣት)</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label>የብር መጠን (ETB):</label>
-            <input type="number" class="form-control" id="req-amount" placeholder="ምሳሌ: 100">
-        </div>
-        <div class="form-group">
-            <label>ስልክ ቁጥር / የባንክ ዝርዝር:</label>
-            <input type="text" class="form-control" id="req-details" placeholder="ስልክ ቁጥር ወይም የባንክ አካውንት">
-        </div>
-        <button class="btn-main" onclick="submitRequest()"> ጥያቄ ላክ </button>
-        <div class="result-box" id="wallet-result" style="margin-top:10px;">ጥያቄዎን በአስተማማኝ ሁኔታ ይላኩ</div>
+    <!-- ንቁ የቢንጎ 5x5 ጨዋታ ካርድ -->
+    <div id="bingo-game-section" class="card hidden">
+        <h2>🎯 ንቁ የቢንጎ ካርድ</h2>
+        <div id="bingo-status-info" style="font-size:12px; color:#38bdf8; margin-bottom:8px;"></div>
+        <div class="bingo-board" id="bingo-5x5-board"></div>
+        <button class="btn" style="background:#22c55e; margin-top:15px;" onclick="checkBingoWin()">🎯 BINGO አረጋግጥ (Check Win)</button>
+        <button class="btn" style="background:#64748b;" onclick="showSection('main-menu')">🔙 ዋና ሜኑ</button>
     </div>
 
-    <!-- 4. COMMENT SECTION -->
-    <div id="comment-section" class="section">
-        <h3>💬 ለአድሚን አስተያየት መስጫ</h3>
-        <div class="form-group">
-            <label>መልእክትዎ ወይም ጥያቄዎ:</label>
-            <textarea class="form-control" id="comment-msg" rows="4" placeholder="አስተያየትዎን እዚህ ይጻፉ..."></textarea>
-        </div>
-        <button class="btn-main" onclick="sendComment()">አስተያየት ላክ</button>
-        <div class="result-box" id="comment-result" style="margin-top:10px;">አስተያየትዎ ለአድሚን በቀጥታ ይተላለፋል</div>
-    </div>
-
-    <script>
-        const tg = window.Telegram.WebApp;
-        tg.expand();
-
-        const tgUser = tg.initDataUnsafe?.user;
-        const userId = tgUser ? tgUser.id : 380035906; 
-        const userName = tgUser ? (tgUser.first_name || 'ተጫዋች') : 'ተጫዋች';
+    <!-- የኬኖ ክፍል ከኦፊሴላዊ አከፋፈል/ማባዣ ሰንጠረዥ ጋር -->
+    <div id="keno-section" class="card hidden">
+        <h2>🎲 ኬኖ ጨዋታ (1 እስከ 10 ቁጥሮች)</h2>
         
-        document.getElementById('u-id').innerText = userId;
-        document.getElementById('u-name').innerText = userName;
+        <!-- የኬኖ ማባዣ (Payout Table) በግልጽ ተካቷል -->
+        <div class="payout-table">
+            📊 <b>የኬኖ ማባዣ ሰንጠረዥ (Payout Multipliers):</b><br>
+            • 1 ቁጥር: <b>0.2x</b> | 2 ቁጥር: <b>0.3x</b> (ወይም ሬፈንድ)<br>
+            • 3 ቁጥር: <b>0.5x</b> | 4 ቁጥር: <b>0.8x</b><br>
+            • 5 ቁጥር: <b>1.2x</b> | 6 ቁጥር: <b>2.0x</b><br>
+            • 7 ቁጥር: <b>3.5x</b> | 8 ቁጥር: <b>6.0x</b><br>
+            • 9 ቁጥር: <b>10.0x</b> | 10 ቁጥር: <b>20.0x</b>
+        </div>
 
-        let userBalance = 0;
-
-        async function fetchUserData() {
-            try {
-                let res = await fetch(`/api/user/${userId}`);
-                let data = await res.json();
-                userBalance = data.balance;
-                document.getElementById('u-balance').innerText = userBalance;
-            } catch(e) {
-                console.error("Error fetching user:", e);
-            }
-        }
-        fetchUserData();
-
-        function switchTab(tabId, btn) {
-            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById(tabId + '-section').classList.add('active');
-            btn.classList.add('active');
-        }
-
-        // --- KENO LOGIC ---
-        let selectedKenoNums = [];
-        const kenoGrid = document.getElementById('keno-grid');
+        <label>የውርርድ መጠን (ETB):</label>
+        <select id="keno-bet">
+            <option value="10">10 ETB</option>
+            <option value="20">20 ETB</option>
+            <option value="50">50 ETB</option>
+            <option value="100">100 ETB</option>
+        </select>
         
-        function createKenoBoard() {
-            kenoGrid.innerHTML = '';
-            for(let i = 1; i <= 80; i++) {
-                let btn = document.createElement('button');
-                btn.className = 'num-btn';
-                btn.innerText = i;
-                btn.id = `k-btn-${i}`;
-                btn.onclick = () => toggleKenoNum(i);
-                kenoGrid.appendChild(btn);
-            }
-            updateKenoPotentialWin();
-        }
-        createKenoBoard();
+        <div id="keno-status-text" style="font-size:13px; color:#38bdf8; margin-bottom:5px;">ቁጥሮችን ይምረጡ (0/10)</div>
+        <div class="grid-80" id="keno-grid" style="grid-template-columns: repeat(8, 1fr); max-height: 160px;"></div>
+        
+        <button class="btn" style="background:#22c55e;" onclick="playKeno()">🎲 ኬኖ Draw ጀምር</button>
+        <button class="btn" style="background:#64748b;" onclick="showSection('main-menu')">🔙 ተመለስ</button>
+    </div>
 
-        function getMultiplier(count) {
-            if (count === 10) return 20;
-            if (count === 9) return 10;
-            if (count === 8) return 6;
-            if (count === 7) return 3.5;
-            if (count === 6) return 2;
-            if (count === 5) return 1.2;
-            if (count === 4) return 0.8;
-            if (count === 3) return 0.5;
-            if (count === 2) return 0.3;
-            if (count === 1) return 0.2;
-            return 0;
-        }
+    <!-- ፕሮፋይል -->
+    <div id="profile-section" class="card hidden">
+        <h2>👤 ፕሮፋይል</h2>
+        <p>ስም: <span id="p-name">-</span></p>
+        <p>ስልክ: <span id="p-phone">-</span></p>
+        <p>ጨዋታዎች: <span id="p-games">0</span></p>
+        <p>Wins/Losses: <span id="p-wins">0</span> / <span id="p-losses">0</span></p>
+        <button class="btn" style="background:#64748b;" onclick="showSection('main-menu')">🔙 ተመለስ</button>
+    </div>
+</div>
 
-        function updateKenoPotentialWin() {
-            let bet = parseInt(document.getElementById('keno-bet-amount').value);
-            let count = selectedKenoNums.length;
-            let mult = getMultiplier(count);
-            let estimatedWin = count === 0 ? 0 : Math.round(bet + (bet * mult));
-            document.getElementById('keno-potential-view').innerText = `የመረጧቸው: ${count} ቁጥሮች | የሚጠበቀው ሽልማት: ~${estimatedWin} ETB`;
-        }
+<script>
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+    const user = tg.initDataUnsafe?.user || { id: 380035906, first_name: "አድሚን (Test)" };
 
-        function toggleKenoNum(num) {
-            let idx = selectedKenoNums.indexOf(num);
-            let btn = document.getElementById(`k-btn-${num}`);
-            if(idx > -1) {
-                selectedKenoNums.splice(idx, 1);
-                btn.classList.remove('selected');
-                btn.innerText = num;
-            } else {
-                if(selectedKenoNums.length >= 10) {
-                    alert('⚠️ ቢበዛ 10 ቁጥሮች ብቻ መምረጥ ይችላሉ!');
-                    return;
-                }
-                selectedKenoNums.push(num);
-                btn.classList.add('selected');
-            }
-            updateKenoPotentialWin();
-        }
+    let currentUserData = {};
+    let selectedKenoNumbers = [];
+    let currentBingoCost = 10;
+    let currentBingoMatrix = [];
+    let currentDrawnNumbers = [];
 
-        async function startKenoDraw() {
-            if(selectedKenoNums.length === 0) {
-                alert('⚠️ ቢያንስ አንድ ቁጥር ይምረጡ!');
-                return;
-            }
-            let betAmount = parseInt(document.getElementById('keno-bet-amount').value);
-            let kenoBtn = document.getElementById('keno-btn');
-            kenoBtn.disabled = true;
+    function showSection(sectionId) {
+        document.querySelectorAll('.card').forEach(el => el.classList.add('hidden'));
+        document.getElementById(sectionId).classList.remove('hidden');
+        if(sectionId === 'main-menu') fetchUserData();
+    }
 
-            let res = await fetch('/api/play/keno', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ userId, selectedNumbers: selectedKenoNums, betAmount })
-            });
+    async function fetchUserData() {
+        try {
+            let res = await fetch(`/api/user?userId=${user.id}&userName=${encodeURIComponent(user.first_name)}`);
             let data = await res.json();
-            
-            if(!data.success) {
-                alert(data.message);
-                kenoBtn.disabled = false;
-                return;
+            currentUserData = data;
+            document.getElementById('username').innerText = data.userName;
+            document.getElementById('user-balance').innerText = `ETB ${data.balance}`;
+            document.getElementById('user-level').innerText = `ሌቭል: ${data.level}`;
+            document.getElementById('p-name').innerText = data.userName;
+            document.getElementById('p-phone').innerText = data.phone || 'አልተመዘገበም';
+            document.getElementById('p-games').innerText = data.totalGames;
+            document.getElementById('p-wins').innerText = data.wins;
+            document.getElementById('p-losses').innerText = data.losses;
+        } catch (e) { console.error(e); }
+    }
+
+    // --- ቢንጎ ሎጂክ ---
+    async function selectBingoCost(cost) {
+        currentBingoCost = cost;
+        showSection('bingo-pick-section');
+        let res = await fetch('/api/bingo/taken-numbers');
+        let data = await res.json();
+        let takenList = data.takenNumbers || [];
+
+        let grid = document.getElementById('bingo-100-grid');
+        grid.innerHTML = '';
+        for (let i = 1; i <= 100; i++) {
+            let btn = document.createElement('button');
+            btn.className = 'grid-btn';
+            btn.innerText = i;
+            if (takenList.includes(i)) {
+                btn.classList.add('taken');
+                btn.disabled = true;
+            } else {
+                btn.onclick = () => pickBingoNumber(i);
             }
+            grid.appendChild(btn);
+        }
+    }
 
-            let drawns = data.drawnNumbers;
-            let currentIdx = 0;
-            document.getElementById('keno-result').innerText = "🎲 ኬኖ ጨዋታ በሂደት ላይ... ቁጥሮች እየወጡ ነው";
+    async function pickBingoNumber(num) {
+        let res = await fetch('/api/bingo/pick', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ userId: user.id, userName: user.first_name, number: num, cost: currentBingoCost })
+        });
+        let result = await res.json();
+        if(!result.success) { alert(result.error); return; }
 
-            let drawInterval = setInterval(() => {
-                if(currentIdx < drawns.length) {
-                    let drawnNum = drawns[currentIdx];
-                    let btnEl = document.getElementById(`k-btn-${drawnNum}`);
-                    if(btnEl) {
-                        if(selectedKenoNums.includes(drawnNum)) {
-                            btnEl.className = 'num-btn matched';
-                            btnEl.innerText = `⭐${drawnNum}`;
+        currentBingoMatrix = result.matrix;
+        currentDrawnNumbers = result.drawnHistory || [result.firstDrawn];
+        renderBingoBoard();
+        showSection('bingo-game-section');
+        document.getElementById('bingo-status-info').innerText = `ቁጥር ${num} ተይዟል! ፖል: ETB ${result.totalPool} (ሽልማት: ${result.winnerReward})`;
+    }
+
+    function renderBingoBoard() {
+        let board = document.getElementById('bingo-5x5-board');
+        board.innerHTML = '';
+        ['B', 'I', 'N', 'G', 'O'].forEach(h => {
+            let div = document.createElement('div');
+            div.className = 'bingo-header-cell';
+            div.innerText = h;
+            board.appendChild(div);
+        });
+
+        currentBingoMatrix.forEach((row, r) => {
+            row.forEach((cell, c) => {
+                let btn = document.createElement('button');
+                btn.className = 'bingo-cell';
+                if (cell.isFree) {
+                    btn.innerText = '⭐';
+                    btn.classList.add('free');
+                } else {
+                    btn.innerText = cell.number;
+                    if (cell.marked) btn.classList.add('marked');
+                    btn.onclick = () => {
+                        if (currentDrawnNumbers.includes(cell.number)) {
+                            cell.marked = !cell.marked;
+                            renderBingoBoard();
                         } else {
-                            btnEl.className = 'num-btn drawn';
+                            alert('ይህ ቁጥር ገና አልተጠራም!');
                         }
-                    }
-                    currentIdx++;
-                } else {
-                    clearInterval(drawInterval);
-                    kenoBtn.disabled = false;
-                    userBalance = data.newBalance;
-                    document.getElementById('u-balance').innerText = userBalance;
-
-                    if(data.winAmount > 0) {
-                        document.getElementById('keno-result').innerHTML = `<span style="color:#4ade80;">🎉 አሸንፈዋል! ሽልማት: ETB ${data.winAmount}</span>`;
-                    } else {
-                        document.getElementById('keno-result').innerHTML = `<span style="color:#ef4444;">❌ ተሸንፈዋል! አዲስ ጨዋታ ይጀምሩ።</span>`;
-                    }
-
-                    setTimeout(() => {
-                        selectedKenoNums = [];
-                        createKenoBoard();
-                    }, 4000);
+                    };
                 }
-            }, 3000);
-        }
-
-        // --- BINGO LOGIC ---
-        let bingoCells = [];
-        let calledNumbers = [];
-        let bingoInterval = null;
-        let selectedBingoStake = 10;
-
-        async function joinBingoLobby() {
-            selectedBingoStake = parseInt(document.getElementById('bingo-stake').value);
-            
-            if(userBalance < selectedBingoStake) {
-                alert(`⚠️ በቂ የኪስ ቦርሳ ሂሳብ የለዎትም (ይህ ክፍል ${selectedBingoStake} ETB ይጠይቃል)`);
-                return;
-            }
-
-            try {
-                let res = await fetch('/api/play/bingo', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ userId, betAmount: selectedBingoStake })
-                });
-                let data = await res.json();
-                if(!data.success) { 
-                    alert(data.message || 'ስህተት ተፈጥሯል'); 
-                    return; 
-                }
-
-                userBalance = data.newBalance;
-                document.getElementById('u-balance').innerText = userBalance;
-            } catch(e) {
-                console.error(e);
-                alert('ሰርቨር ጋር መገናኘት አልተቻለም');
-                return;
-            }
-
-            document.getElementById('bingo-setup-box').style.display = 'none';
-            document.getElementById('bingo-live-box').style.display = 'block';
-            document.getElementById('bingo-result').innerText = "ጨዋታው በሂደት ላይ ነው...";
-
-            generateRandomBingoCard();
-            startCountdownTimer();
-        }
-
-        function startCountdownTimer() {
-            let timeLeft = 30;
-            let timerEl = document.getElementById('bingo-timer');
-            let statusEl = document.getElementById('bingo-status-text');
-            statusEl.innerText = `ተጫዋቾች ተቀላቀሉ (ክፍል: ${selectedBingoStake} ETB)`;
-            
-            let countdown = setInterval(() => {
-                timeLeft--;
-                timerEl.innerText = `ጨዋታው ሊጀምር: ${timeLeft} ሰከንድ ይቀረዋል`;
-                if(timeLeft <= 0) {
-                    clearInterval(countdown);
-                    timerEl.innerText = "🚀 ጨዋታው ተጀምሯል!";
-                    startLiveCaller();
-                }
-            }, 1000);
-        }
-
-        function generateRandomBingoCard() {
-            let boardEl = document.getElementById('bingo-board');
-            boardEl.innerHTML = '';
-            bingoCells = [];
-
-            ['B','I','N','G','O'].forEach(char => {
-                let div = document.createElement('div');
-                div.className = 'bingo-cell bingo-header-cell';
-                div.innerText = char;
-                boardEl.appendChild(div);
+                board.appendChild(btn);
             });
+        });
+    }
 
-            let randNums = [];
-            while(randNums.length < 24) {
-                let r = Math.floor(Math.random() * 75) + 1;
-                if(!randNums.includes(r)) randNums.push(r);
-            }
+    async function checkBingoWin() {
+        let res = await fetch('/api/bingo/check-win', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ userId: user.id, matrix: currentBingoMatrix })
+        });
+        let result = await res.json();
+        alert(result.message);
+        if(result.success) { fetchUserData(); showSection('main-menu'); }
+    }
 
-            let nIdx = 0;
-            for(let r = 0; r < 5; r++) {
-                let row = [];
-                for(let c = 0; c < 5; c++) {
-                    let cellDiv = document.createElement('div');
-                    cellDiv.className = 'bingo-cell';
-                    
-                    if(r === 2 && c === 2) {
-                        cellDiv.innerText = '⭐';
-                        cellDiv.classList.add('marked');
-                        row.push({ number: 'FREE', marked: true, isFree: true, element: cellDiv });
-                    } else {
-                        let num = randNums[nIdx++];
-                        cellDiv.innerText = num;
-                        let cellData = { number: num, marked: false, isFree: false, element: cellDiv };
-                        cellDiv.onclick = () => {
-                            cellData.marked = !cellData.marked;
-                            cellDiv.classList.toggle('marked');
-                        };
-                        row.push(cellData);
-                    }
-                    boardEl.appendChild(cellDiv);
-                }
-                bingoCells.push(row);
-            }
-        }
-
-        function startLiveCaller() {
-            document.getElementById('check-bingo-btn').disabled = false;
-            calledNumbers = [];
-
-            let allPool = [];
-            for(let i=1; i<=75; i++) allPool.push(i);
-            allPool.sort(() => Math.random() - 0.5);
-
-            let callIndex = 0;
-            let historyBox = document.getElementById('called-history-box');
-
-            bingoInterval = setInterval(() => {
-                if(callIndex < allPool.length) {
-                    let currentNum = allPool[callIndex];
-                    calledNumbers.push(currentNum);
-                    let formattedRows = [];
-                    for (let i = 0; i < calledNumbers.length; i += 10) {
-                        let chunk = calledNumbers.slice(i, i + 10).join(', ');
-                        formattedRows.push(chunk);
-                    }
-                    historyBox.innerHTML = `🟢 <b>የወጡ ቁጥሮች ታሪክ:</b><br>` + formattedRows.join('<br>');
-                    callIndex++;
+    // --- ኬኖ ሎጂክ ከሙሉ ማባዣ ስሌት ጋር ---
+    function openKenoMenu() {
+        showSection('keno-section');
+        selectedKenoNumbers = [];
+        let grid = document.getElementById('keno-grid');
+        grid.innerHTML = '';
+        for (let i = 1; i <= 80; i++) {
+            let btn = document.createElement('button');
+            btn.className = 'grid-btn';
+            btn.innerText = i;
+            btn.onclick = () => {
+                let idx = selectedKenoNumbers.indexOf(i);
+                if (idx > -1) {
+                    selectedKenoNumbers.splice(idx, 1);
+                    btn.classList.remove('selected');
                 } else {
-                    clearInterval(bingoInterval);
-                    document.getElementById('bingo-status-text').innerText = "ጨዋታው ተጠናቀቀ!";
+                    if (selectedKenoNumbers.length >= 10) { alert('ቢበዛ 10 ቁጥሮች ብቻ መምረጥ ይችላሉ!'); return; }
+                    selectedKenoNumbers.push(i);
+                    btn.classList.add('selected');
                 }
-            }, 3000);
+                document.getElementById('keno-status-text').innerText = `መረጧቸው ቁጥሮች: [${selectedKenoNumbers.sort((a,b)=>a-b)}] (${selectedKenoNumbers.length}/10)`;
+            };
+            grid.appendChild(btn);
         }
+    }
 
-        async function checkBingoWin() {
-            let hasWon = false;
-            for(let r = 0; r < 5; r++) {
-                if(bingoCells[r].every(cell => cell.marked)) { hasWon = true; break; }
-            }
-            for(let c = 0; c < 5; c++) {
-                if(bingoCells.every(row => row[c].marked)) { hasWon = true; break; }
-            }
-            if(bingoCells[0][0].marked && bingoCells[1][1].marked && bingoCells[2][2].marked && bingoCells[3][3].marked && bingoCells[4][4].marked) {
-                hasWon = true;
-            }
-            if(bingoCells[0][4].marked && bingoCells[1][3].marked && bingoCells[2][2].marked && bingoCells[3][1].marked && bingoCells[4][0].marked) {
-                hasWon = true;
-            }
+    async function playKeno() {
+        let betAmount = parseInt(document.getElementById('keno-bet').value);
+        if (selectedKenoNumbers.length === 0) { alert('ቢያንስ 1 ቁጥር ይምረጡ!'); return; }
+        
+        let res = await fetch('/api/play-keno', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ userId: user.id, betAmount, numbers: selectedKenoNumbers })
+        });
+        let result = await res.json();
+        if(result.success) {
+            alert(`🎲 ${result.message}\nየወጡ ቁጥሮች: [${result.drawnNumbers.slice(0,10).join(', ')}...]\nሽልማት: ETB ${result.winAmount}`);
+            fetchUserData();
+        } else { alert(result.error); }
+    }
 
-            if(!hasWon) {
-                document.getElementById('bingo-result').innerHTML = `<span style="color:#ef4444;">❌ ገና አልሞሉም! ረድፍ ወይም ዲያጎናል አልተሟላም።</span>`;
-                return;
-            }
-
-            clearInterval(bingoInterval);
-            let winAmount = selectedBingoStake * 5;
-
-            userBalance += winAmount;
-            document.getElementById('u-balance').innerText = userBalance;
-            document.getElementById('bingo-result').innerHTML = `<span style="color:#4ade80;">🎉 BINGO! አሸንፈዋል! ሽልማት: ${winAmount} ETB</span>`;
-            
-            setTimeout(() => {
-                document.getElementById('bingo-setup-box').style.display = 'block';
-                document.getElementById('bingo-live-box').style.display = 'none';
-                document.getElementById('check-bingo-btn').disabled = true;
-                document.getElementById('bingo-result').innerText = "አዲስ የውርርድ መጠን በመምረጥ ጨዋታውን እንደገና ይጀምሩ";
-            }, 4000);
-        }
-
-        async function submitRequest() {
-            let type = document.getElementById('req-type').value;
-            let amount = parseFloat(document.getElementById('req-amount').value);
-            let details = document.getElementById('req-details').value;
-
-            if(!amount || !details) {
-                alert('⚠️ እባክዎ የብር መጠን እና የባንክ/ስልክ ዝርዝር በትክክል ይሙሉ!');
-                return;
-            }
-
-            try {
-                let res = await fetch('/api/request', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ userId, userName, type, amount, details })
-                });
-                let data = await res.json();
-                if(data.success) {
-                    document.getElementById('wallet-result').innerHTML = `<span style="color:#4ade80;">✅ ጥያቄዎ ለአድሚን ተልኳል!</span>`;
-                    document.getElementById('req-amount').value = '';
-                    document.getElementById('req-details').value = '';
-                } else {
-                    alert(data.message || 'ስህተት ተፈጥሯል');
-                }
-            } catch(e) {
-                console.error(e);
-                alert('ሰርቨር ጋር መገናኘት አልተቻለም');
-            }
-        }
-
-        async function sendComment() {
-            let message = document.getElementById('comment-msg').value;
-            if(!message) {
-                alert('⚠️ እባክዎ አስተያየትዎን ይጻፉ!');
-                return;
-            }
-
-            try {
-                let res = await fetch('/api/comment', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ userId, userName, message })
-                });
-                let data = await res.json();
-                if(data.success) {
-                    document.getElementById('comment-result').innerHTML = `<span style="color:#4ade80;">✅ አስተያየትዎ ለአድሚን ተልኳል!</span>`;
-                    document.getElementById('comment-msg').value = '';
-                } else {
-                    alert(data.message || 'ስህተት ተፈጥሯል');
-                }
-            } catch(e) {
-                console.error(e);
-                alert('ሰርቨር ጋር መገናኘት አልተቻለም');
-            }
-        }
-    </script>
+    fetchUserData();
+</script>
 </body>
 </html>
