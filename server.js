@@ -100,7 +100,7 @@ async function getOrCreateUser(userId, userName = 'ተጫዋች') {
 
 // 🌐 ዌብ ዩአርኤል (Web URL / Web Server Endpoint)
 app.get('/', (req, res) => {
-  res.send('Efuye Bingo & Keno Ultimate Bot Server is running!');
+    res.sendFile(__dirname + '/public/index.html');
 });
 
 app.listen(PORT, () => {
