@@ -1,9 +1,14 @@
 require('dotenv').config();
 const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
 const { Telegraf, Markup } = require('telegraf');
 const mongoose = require('mongoose');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
+
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
@@ -272,8 +277,108 @@ app.post('/api/play-keno', async (req, res) => {
 });
 
 // ========================================================
+// --- 🔌 SOCKET.IO REAL-TIME EVENT HANDLERS ---
+// ========================================================
+io.on('connection', (socket) => {
+    console.log('⚡ User connected via Socket.io:', socket.id);
 
-app.listen(PORT, () => {
+    // ተጠቃሚው ከዌብ አፕ ሆኖ የኬኖ ላይቭ ድሮ ሲያስጀምር
+    socket.on('start_keno_draw_ws', async (data) => {
+        const { userId, betAmount, numbers } = data;
+        let user = await User.findOne({ userId });
+
+        if (!user && userId !== ADMIN_ID) {
+            socket.emit('keno_tick', { success: false, error: 'ተጠቃሚው አልተገኘም' });
+            return;
+        }
+
+        if (userId !== ADMIN_ID && user.balance < betAmount) {
+            socket.emit('keno_tick', { success: false, error: 'በቂ ባላንስ የለዎትም!' });
+            return;
+        }
+
+        if (userId !== ADMIN_ID) {
+            user.balance -= betAmount;
+            user.totalGames += 1;
+            await user.save();
+        }
+
+        let allNums = Array.from({ length: 80 }, (_, i) => i + 1);
+        let drawnNumbers = [];
+        while (drawnNumbers.length < 20) {
+            let rIdx = Math.floor(Math.random() * allNums.length);
+            drawnNumbers.push(allNums.splice(rIdx, 1)[0]);
+        }
+
+        let currentIndex = 0;
+        let displayedDrawn = [];
+
+        let kenoInterval = setInterval(async () => {
+            if (currentIndex < drawnNumbers.length) {
+                displayedDrawn.push(drawnNumbers[currentIndex]);
+                currentIndex++;
+
+                socket.emit('keno_tick', {
+                    isFinished: false,
+                    displayedDrawn: [...displayedDrawn]
+                });
+            } else {
+                clearInterval(kenoInterval);
+
+                let matches = numbers.filter(n => drawnNumbers.includes(n));
+                let matchCount = matches.length;
+                let winAmount = 0;
+                let selectedCount = numbers.length;
+
+                if (matchCount === selectedCount) {
+                    let multiplier = 0;
+                    if (selectedCount === 10) multiplier = 20;
+                    else if (selectedCount === 9) multiplier = 10;
+                    else if (selectedCount === 8) multiplier = 6;
+                    else if (selectedCount === 7) multiplier = 3.5;
+                    else if (selectedCount === 6) multiplier = 2;
+                    else if (selectedCount === 5) multiplier = 1.2;
+                    else if (selectedCount === 4) multiplier = 0.8;
+                    else if (selectedCount === 3) multiplier = 0.5;
+                    else if (selectedCount === 2) multiplier = 0.3;
+                    else if (selectedCount === 1) multiplier = 0.2;
+
+                    winAmount = Math.round(betAmount + (betAmount * multiplier));
+                } else if (selectedCount === 4 && matchCount === 2) {
+                    winAmount = Math.round(betAmount + (betAmount * 0.2));
+                } else if (selectedCount === 3 && matchCount === 2) {
+                    winAmount = Math.round(betAmount + (betAmount * 0.5));
+                } else if (selectedCount === 2 && matchCount === 1) {
+                    winAmount = betAmount; 
+                }
+
+                if (winAmount > 0 && userId !== ADMIN_ID) {
+                    user.balance += winAmount;
+                    user.wins += 1;
+                } else if (winAmount === 0 && userId !== ADMIN_ID) {
+                    user.losses += 1;
+                }
+
+                if (userId !== ADMIN_ID) await user.save();
+
+                socket.emit('keno_tick', {
+                    isFinished: true,
+                    displayedDrawn,
+                    winAmount,
+                    balance: user ? user.balance : 0
+                });
+            }
+        }, 1000); // በየ 1 ሰከንዱ ቁጥሮቹን እየላከ ይጫወታል
+    });
+
+    socket.on('disconnect', () => {
+        console.log('🔌 User disconnected:', socket.id);
+    });
+});
+
+// ========================================================
+
+server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
 
@@ -1270,4 +1375,4 @@ bot.on('text', async (ctx) => {
 });
 
 bot.launch();
-console.log('🤖 Bot is running with full safe catch blocks for smooth editing!');
+console.log('🤖 Bot & Socket.io server is running smoothly!');
