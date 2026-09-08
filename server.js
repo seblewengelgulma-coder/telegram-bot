@@ -7,7 +7,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
-app.use(express.static('public')); // የፊት ገጽ (HTML) ፋይሎች እንዲነበቡ
+app.use(express.static('public'));
 
 // --- 1. የሞንጎዲቢ ግንኙነት (MongoDB Connection) ---
 const MONGO_URI = process.env.MONGO_URI;
@@ -106,7 +106,6 @@ app.get('/', (req, res) => {
     res.sendFile(__dirname + '/public/index.html');
 });
 
-// 1. የተጠቃሚውን መረጃ (ባላንስ እና ሌቭል) ለሚኒ-አፑ የሚልክ ኤፒአይ
 app.get('/api/user', async (req, res) => {
     try {
         const userId = parseInt(req.query.userId);
@@ -134,7 +133,6 @@ app.get('/api/user', async (req, res) => {
     }
 });
 
-// 2. የተያዙ የቢንጎ ቁጥሮችን ለሚኒ-አፑ የሚልክ ኤፒአይ
 app.get('/api/bingo/taken-numbers', async (req, res) => {
     try {
         let takenDocs = await TakenNumber.find({});
@@ -145,7 +143,6 @@ app.get('/api/bingo/taken-numbers', async (req, res) => {
     }
 });
 
-// 3. በዌብ አፕ በኩል የቢንጎ ቁጥር ሲመርጡ የሚሰራ ኤፒአይ
 app.post('/api/bingo/pick', async (req, res) => {
     try {
         const { userId, userName, number, cost } = req.body;
@@ -184,13 +181,12 @@ app.post('/api/bingo/pick', async (req, res) => {
     }
 });
 
-// 4. በዌብ አፕ የቢንጎ ዊን ማረጋገጫ ኤፒአይ
 app.post('/api/bingo/check-win', async (req, res) => {
     try {
         const { userId, matrix } = req.body;
         if (checkWinCondition(matrix)) {
             let user = await User.findOne({ userId });
-            let reward = 18; // ነባሪ የድል ሽልማት
+            let reward = 18; 
             if (user && userId !== ADMIN_ID) {
                 user.balance += reward;
                 user.wins += 1;
@@ -206,7 +202,6 @@ app.post('/api/bingo/check-win', async (req, res) => {
     }
 });
 
-// 5. በዌብ አፕ በኩል የኬኖ ጨዋታን የሚያስተናግድ ኤፒአይ
 app.post('/api/play-keno', async (req, res) => {
     try {
         const { userId, betAmount, numbers } = req.body;
@@ -253,7 +248,7 @@ app.post('/api/play-keno', async (req, res) => {
         } else if (selectedCount === 3 && matchCount === 2) {
             winAmount = Math.round(betAmount + (betAmount * 0.5));
         } else if (selectedCount === 2 && matchCount === 1) {
-            winAmount = betAmount; // Refund
+            winAmount = betAmount; 
         }
 
         if (winAmount > 0 && userId !== ADMIN_ID) {
@@ -282,7 +277,6 @@ app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
 
-// የኬኖ ኪቦርድ ማመንጫ
 function getKenoKeyboard(selectedNumbers = [], betAmount = 10) {
     let keyboard = [];
     let row = [];
@@ -317,13 +311,7 @@ function getKenoStatusText(selectedNumbers, betAmount, userBalance) {
     else if (count === 1) { multiplier = 0.2; }
 
     let potentialWin = Math.round(betAmount + (betAmount * multiplier));
-
-    let desc = "";
-    if (count === 0) {
-        desc = "💡 *እባክዎ ከ 1 እስከ 10 ቁጥሮች ይምረጡ።*";
-    } else {
-        desc = `✨ **ሁኔታ:** ${count} ቁጥር መርጠዋል (ማባዣው **${multiplier}x** ነው)`;
-    }
+    let desc = count === 0 ? "💡 *እባክዎ ከ 1 እስከ 10 ቁጥሮች ይምረጡ።*" : `✨ **ሁኔታ:** ${count} ቁጥር መርጠዋል (ማባዣው **${multiplier}x** ነው)`;
 
     return `🎲 **ኬኖ ጨዋታ (የውርርድ መጠን: ${betAmount} ETB)**\n\n` +
            `የመረጧቸው ቁጥሮች: [ **${selectedNumbers.sort((a,b)=>a-b).join(', ')}** ] (${count}/10)\n\n` +
@@ -558,7 +546,10 @@ bot.action(/b_pick_(\d+)/, async (ctx) => {
 
         let matrix = generateRandomBingoCard();
         if (!waitingRoom[cost]) waitingRoom[cost] = [];
-        waitingRoom[cost].push({ userId, ctx, matrix, cost, pickedNumber: num });
+        
+        let chatId = ctx.chat.id;
+        let messageId = ctx.callbackQuery.message.message_id;
+        waitingRoom[cost].push({ userId, chatId, messageId, matrix, cost, pickedNumber: num });
 
         await ctx.editMessageText(
             `⏳ **ቁጥር ${num} ተመርጧል! ተጫዋቾችን በመጠበቅ ላይ (30 ሰከንድ)...**`,
@@ -588,7 +579,7 @@ function runBingoQueue(cost) {
                     await pUser.save();
                 }
                 try {
-                    await p.ctx.editMessageText(`⚠️ **በቂ ተጫዋች ባለመገኘቱ ጨዋታው ተሰርዟል! ገንዘብዎ ተመልሷል።**`);
+                    await bot.telegram.editMessageText(p.chatId, p.messageId, undefined, `⚠️ **በቂ ተጫዋች ባለመገኘቱ ጨዋታው ተሰርዟል! ገንዘብዎ ተመልሷል።**`);
                 } catch (e) {}
             }
             delete waitingRoom[cost];
@@ -613,40 +604,54 @@ function runBingoQueue(cost) {
                 gameId, matrix: p.matrix, cost: p.cost, 
                 drawnNumber: firstDrawn, drawnHistory: [...drawnHistory],
                 availableNumbers: [...availableNumbers], gameActive: true,
-                roomPlayers, winnerReward, totalPool, pickedNumber: p.pickedNumber
+                roomPlayers, winnerReward, totalPool, pickedNumber: p.pickedNumber,
+                chatId: p.chatId, messageId: p.messageId
             };
 
             try {
-                await p.ctx.editMessageText(
+                await bot.telegram.editMessageText(
+                    p.chatId, p.messageId, undefined,
                     `🎲 **የቢንጎ ጨዋታ ተጀምሯል! (ETB ${p.cost})**\n` +
                     `💰 አጠቃላይ ፖል: **ETB ${totalPool}** (ሽልማት: ${winnerReward})\n` +
                     `📜 **ታሪክ:** [ ${drawnHistory.join(', ')} ]\n` +
-                    `🟢 **አሁንቁጥር: [ ${firstDrawn} ]**`,
-                    getBingoKeyboard(p.matrix)
+                    `🟢 **አሁን ቁጥር: [ ${firstDrawn} ]**`,
+                    { parse_mode: 'Markdown', ...getBingoKeyboard(p.matrix) }
                 );
             } catch (e) {}
+        }
 
-            let interval = setInterval(async () => {
-                let currentGame = activeGames[p.userId];
-                if (!currentGame || !currentGame.gameActive || currentGame.gameId !== gameId || currentGame.availableNumbers.length === 0) {
-                    clearInterval(interval);
-                    return;
+        let globalGameInterval = setInterval(async () => {
+            if (availableNumbers.length === 0) {
+                clearInterval(globalGameInterval);
+                return;
+            }
+
+            let newNum = availableNumbers.splice(Math.floor(Math.random() * availableNumbers.length), 1)[0];
+            drawnHistory.push(newNum);
+
+            for (let pId of roomPlayers) {
+                let currentGame = activeGames[pId];
+                if (!currentGame || !currentGame.gameActive || currentGame.gameId !== gameId) {
+                    continue;
                 }
-                let newNum = currentGame.availableNumbers.splice(Math.floor(Math.random() * currentGame.availableNumbers.length), 1)[0];
                 currentGame.drawnNumber = newNum;
-                currentGame.drawnHistory.push(newNum);
+                currentGame.drawnHistory = [...drawnHistory];
 
                 try {
-                    await p.ctx.editMessageText(
-                        `🎲 **ጨዋታ በሂደት ላይ... (ETB ${p.cost})**\n` +
+                    await bot.telegram.editMessageText(
+                        currentGame.chatId,
+                        currentGame.messageId,
+                        undefined,
+                        `🎲 **ጨዋታ በሂደት ላይ... (ETB ${currentGame.cost})**\n` +
                         `📜 **ታሪክ:** [ ${currentGame.drawnHistory.join(', ')} ]\n` +
-                        `🟢 **አሁንቁጥር: [ ${newNum} ]**`,
-                        getBingoKeyboard(currentGame.matrix)
+                        `🟢 **አሁን ቁጥር: [ ${newNum} ]**`,
+                        { parse_mode: 'Markdown', ...getBingoKeyboard(currentGame.matrix) }
                     );
                 } catch (e) {}
-            }, 6000);
-        }
-    }, 30000);
+            }
+        }, 4000);
+
+    }, 3000);
 }
 
 bot.action('select_keno', (ctx) => {
@@ -670,7 +675,6 @@ bot.action(/keno_bet_(\d+)/, async (ctx) => {
     }
 
     kenoSessions[userId] = { selectedNumbers: [], betAmount: betAmount };
-
     let textMsg = getKenoStatusText([], betAmount, user.balance);
     ctx.editMessageText(textMsg, getKenoKeyboard([], betAmount));
 });
@@ -748,7 +752,7 @@ bot.action('start_keno_draw', async (ctx) => {
         await user.save();
     }
 
-    await ctx.answerCbQuery('🎲 የኬኖ ጨዋታ ተጀምሯል! ቁጥሮች በየ 3 ሰከንድ ይወጣሉ...');
+    await ctx.answerCbQuery('🎲 የኬኖ ጨዋታ ተጀምሯል! ቁጥሮች በቅደም ተከተል ይወጣሉ...');
 
     let allNums = Array.from({length: 80}, (_, i) => i + 1);
     let drawnNumbers = [];
@@ -759,6 +763,8 @@ bot.action('start_keno_draw', async (ctx) => {
 
     let currentDrawnIndex = 0;
     let displayedDrawn = [];
+    let chatId = ctx.chat.id;
+    let messageId = ctx.callbackQuery.message.message_id;
 
     let drawInterval = setInterval(async () => {
         if (currentDrawnIndex < drawnNumbers.length) {
@@ -768,12 +774,15 @@ bot.action('start_keno_draw', async (ctx) => {
             let matchesCount = session.selectedNumbers.filter(n => displayedDrawn.includes(n)).length;
 
             try {
-                await ctx.editMessageText(
+                await bot.telegram.editMessageText(
+                    chatId,
+                    messageId,
+                    undefined,
                     `🎲 **የኬኖ ጨዋታ በሂደት ላይ... (የውርርድ መጠን: ${betAmount} ETB)**\n\n` +
                     `🎯 የመረጧቸው: [ **${session.selectedNumbers.sort((a,b)=>a-b).join(', ')}** ]\n` +
                     `🔴 የወጡ ቁጥሮች: [ ${displayedDrawn.join(', ')} ]\n` +
-                    `✨ ትክክለኛ ግጥሚያዎች: **${matchesCount}** ቁጥር`,
-                    Markup.inlineKeyboard([])
+                    `✨ ትክክለኛ ግጥሚያዎች እስካሁን: **${matchesCount}** ቁጥር`,
+                    { parse_mode: 'Markdown' }
                 );
             } catch (e) {}
         } else {
@@ -801,12 +810,10 @@ bot.action('start_keno_draw', async (ctx) => {
                 winAmount = Math.round(betAmount + (betAmount * multiplier));
             } 
             else if (selectedCount === 4 && matchCount === 2) {
-                let multiplier = 0.2; 
-                winAmount = Math.round(betAmount + (betAmount * multiplier));
+                winAmount = Math.round(betAmount + (betAmount * 0.2));
             }
             else if (selectedCount === 3 && matchCount === 2) {
-                let multiplier = 0.5; 
-                winAmount = Math.round(betAmount + (betAmount * multiplier));
+                winAmount = Math.round(betAmount + (betAmount * 0.5));
             }
             else if (selectedCount === 2 && matchCount === 1) {
                 isRefund = true;
@@ -862,9 +869,14 @@ bot.action('start_keno_draw', async (ctx) => {
             }
 
             delete kenoSessions[userId];
-            await ctx.editMessageText(resultMsg, Markup.inlineKeyboard(keyboardOptions));
+            try {
+                await bot.telegram.editMessageText(chatId, messageId, undefined, resultMsg, {
+                    parse_mode: 'Markdown',
+                    ...Markup.inlineKeyboard(keyboardOptions)
+                });
+            } catch (e) {}
         }
-    }, 3000);
+    }, 2000);
 });
 
 bot.action('back_to_main_menu', (ctx) => {
@@ -1037,9 +1049,10 @@ bot.action(/cell_(\d+)_(\d+)/, async (ctx) => {
 
     if (game.drawnHistory.includes(cell.number)) {
         cell.marked = !cell.marked;
-        ctx.editMessageText(
+        bot.telegram.editMessageText(
+            game.chatId, game.messageId, undefined,
             `🎲 **ጨዋታ በሂደት ላይ...**\n📜 **ታሪክ:** [ ${game.drawnHistory.join(', ')} ]\n🟢 **አሁንቁጥር: [ ${game.drawnNumber} ]**`,
-            getBingoKeyboard(game.matrix)
+            { parse_mode: 'Markdown', ...getBingoKeyboard(game.matrix) }
         ).catch(() => {});
     } else {
         return ctx.answerCbQuery(`❌ ይህ ቁጥር ገና አልተጠራም!`, { show_alert: true });
@@ -1256,4 +1269,4 @@ bot.on('text', async (ctx) => {
 });
 
 bot.launch();
-console.log('🤖 Bot is running with Web App button for all players and admins successfully!');
+console.log('🤖 Bot is running with live drawing interval fixes for Bingo and Keno!');
