@@ -78,7 +78,7 @@ const bot = new Telegraf(TOKEN);
 const ADMIN_ID = 380035906;
 
 // የድር መተግበሪያዎ (Web App) ዩአርኤል (Render ላይ የተጫነበት ሊንክዎ)
-const WEB_APP_URL = process.env.WEB_APP_URL || 'https://telegram-bot-xer2.onrender.com/miniapp';
+const WEB_APP_URL = process.env.WEB_APP_URL || 'https://telegram-bot-xer2.onrender.com';
 
 const ADMIN_PAYMENT_INFO = `🏦 **የአድሚን የክፍያ አካውንቶች (ለዲፖዚት)**\n\n` +
     `1. **ንግድ ባንክ (CBE):** 10005741880 (ቴዎድሮስ / እፉዬ)\n` +
