@@ -443,8 +443,12 @@ function runBingoQueue(cost) {
         drawnHistory.push(firstDrawn);
 
         for (let p of room) {
+            // እዚህ ጋር ጨዋታው አዲስ ሲጀምር የካርዱ ማርኮች በሙሉ 
+            // ወደ አዲስ (ባዶ) ማትሪክስ እንለውጠዋለን (ማርክ እንዳይኖር)፦
+            let freshMatrix = generateRandomBingoCard();
+
             activeGames[p.userId] = { 
-                gameId, matrix: p.matrix, cost: p.cost, 
+                gameId, matrix: freshMatrix, cost: p.cost, // አዲሱን ባዶ ማትሪክስ ተጠቀምን
                 drawnNumber: firstDrawn, drawnHistory: [...drawnHistory],
                 availableNumbers: [...availableNumbers], gameActive: true,
                 roomPlayers, winnerReward, totalPool
@@ -459,7 +463,7 @@ function runBingoQueue(cost) {
                     `💰 አጠቃላይ ፖል: **ETB ${totalPool}** | አሸናፊ ሽልማት: **ETB ${winnerReward}**\n` +
                     `📜 **ታሪክ:** [ ${formattedHistoryText} ]\n` +
                     `🟢 **አሁንቁጥር: [ ${formattedFirstDrawn} ]**`,
-                    getBingoKeyboard(p.matrix)
+                    getBingoKeyboard(freshMatrix)
                 );
             } catch (e) {}
 
