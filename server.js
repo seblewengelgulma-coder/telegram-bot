@@ -83,8 +83,9 @@ const ADMIN_PAYMENT_INFO = `🏦 **የአድሚን የክፍያ አካውንቶ�
 
 let userSteps = {}; 
 let activeGames = {}; 
-let waitingRoom = {}; 
+let waitingRoom = {}; // በዋጋ የተከፋፈለ የሰዎች ማቆያ (የባለ 10፣ 20፣ 50፣ 100 ለየብቻ)
 let kenoSessions = {}; 
+let userSelectedBingoCost = {}; 
 
 async function getOrCreateUser(userId, userName = 'ተጫዋች') {
     let user = await User.findOne({ userId });
@@ -122,7 +123,6 @@ function getKenoKeyboard(selectedNumbers = [], betAmount = 10) {
     return Markup.inlineKeyboard(keyboard);
 }
 
-// የኬኖ ሁኔታ (የተስተካከለ የሂሳብ ስሌት)
 function getKenoStatusText(selectedNumbers, betAmount, userBalance) {
     let count = selectedNumbers.length;
     let multiplier = 0;
@@ -130,13 +130,13 @@ function getKenoStatusText(selectedNumbers, betAmount, userBalance) {
     if (count === 10) { multiplier = 20; }
     else if (count === 9) { multiplier = 10; }
     else if (count === 8) { multiplier = 6; }
-    else if (count === 7) { multiplier = 4.5; }
-    else if (count === 6) { multiplier = 3.5; }
-    else if (count === 5) { multiplier = 2.8; }
-    else if (count === 4) { multiplier = 2.2; }
-    else if (count === 3) { multiplier = 1.6; }
-    else if (count === 2) { multiplier = 1.2; }
-    else if (count === 1) { multiplier = 0.5; }
+    else if (count === 7) { multiplier = 3.5; }
+    else if (count === 6) { multiplier = 2; }
+    else if (count === 5) { multiplier = 1.2; }
+    else if (count === 4) { multiplier = 0.8; }
+    else if (count === 3) { multiplier = 0.5; }
+    else if (count === 2) { multiplier = 0.3; }
+    else if (count === 1) { multiplier = 0.2; }
 
     let potentialWin = Math.round(betAmount + (betAmount * multiplier));
 
@@ -154,8 +154,17 @@ function getKenoStatusText(selectedNumbers, betAmount, userBalance) {
            `አካውንት ባላንስ: **ETB ${userBalance}**`;
 }
 
-// የቢንጎ 1-100 ቁጥሮች ሰሌዳ
-async function getBingo1to100Keyboard() {
+// የቢንጎ ቁጥር ፊደል ሰጪ
+function getFormattedBingoNumber(num) {
+    if (num >= 1 && num <= 15) return `B${num}`;
+    if (num >= 16 && num <= 30) return `I${num}`;
+    if (num >= 31 && num <= 45) return `N${num}`;
+    if (num >= 46 && num <= 60) return `G${num}`;
+    if (num >= 61 && num <= 75) return `O${num}`;
+    return `${num}`;
+}
+
+async function getBingo1to75Keyboard() {
     let keyboard = [];
     let row = [];
     
@@ -163,14 +172,15 @@ async function getBingo1to100Keyboard() {
     let takenMap = {};
     takenDocs.forEach(doc => { takenMap[doc.number] = true; });
 
-    for (let i = 1; i <= 100; i++) {
+    for (let i = 1; i <= 75; i++) {
+        let dispNum = getFormattedBingoNumber(i);
         if (takenMap[i]) {
-            row.push(Markup.button.callback(`✅ ${i}`, `b_taken_${i}`));
+            row.push(Markup.button.callback(`✅ ${dispNum}`, `b_taken_${i}`));
         } else {
-            row.push(Markup.button.callback(`${i}`, `b_pick_${i}`));
+            row.push(Markup.button.callback(`${dispNum}`, `b_pick_${i}`));
         }
 
-        if (row.length === 10) {
+        if (row.length === 5) {
             keyboard.push(row);
             row = [];
         }
@@ -180,21 +190,33 @@ async function getBingo1to100Keyboard() {
 }
 
 function generateRandomBingoCard() {
-    let numbers = [];
-    while (numbers.length < 24) {
-        let rand = Math.floor(Math.random() * 100) + 1;
-        if (!numbers.includes(rand)) numbers.push(rand);
-    }
-    
+    let colRanges = [
+        { min: 1, max: 15 },   // B
+        { min: 16, max: 30 },  // I
+        { min: 31, max: 45 },  // N
+        { min: 46, max: 60 },  // G
+        { min: 61, max: 75 }   // O
+    ];
+
+    let columns = colRanges.map(range => {
+        let nums = [];
+        while (nums.length < 5) {
+            let rand = Math.floor(Math.random() * (range.max - range.min + 1)) + range.min;
+            if (!nums.includes(rand)) nums.push(rand);
+        }
+        return nums;
+    });
+
     let matrix = [];
-    let idx = 0;
     for (let r = 0; r < 5; r++) {
         let row = [];
         for (let c = 0; c < 5; c++) {
             if (r === 2 && c === 2) {
-                row.push({ number: '⭐', marked: true, isFree: true });
+                row.push({ number: '⭐', rawNum: 0, marked: true, isFree: true, display: '⭐' });
             } else {
-                row.push({ number: numbers[idx++], marked: false, isFree: false });
+                let rawNum = columns[c][r];
+                let dispText = getFormattedBingoNumber(rawNum);
+                row.push({ number: rawNum, rawNum: rawNum, marked: false, isFree: false, display: dispText });
             }
         }
         matrix.push(row);
@@ -215,7 +237,12 @@ function getBingoKeyboard(matrix) {
     matrix.forEach((row, rIndex) => {
         let rowButtons = [];
         row.forEach((cell, cIndex) => {
-            let text = cell.marked ? `🟩 ${cell.number}` : `⬜ ${cell.number}`;
+            let text;
+            if (cell.isFree) {
+                text = `⭐ FREE`;
+            } else {
+                text = cell.marked ? `🟩 ${cell.display}` : `⬜ ${cell.display}`;
+            }
             rowButtons.push(Markup.button.callback(text, `cell_${rIndex}_${cIndex}`));
         });
         keyboard.push(rowButtons);
@@ -295,10 +322,7 @@ bot.hears('🎮 ፕለይ (Play)', (ctx) => {
     );
 });
 
-bot.action('select_bingo_main', async (ctx) => {
-    // ተጫዋቹ ወደ ቢንጎ ዋና ማኑ ሲመለስ ቀደም ሲል ይዞት የነበረ ቁጥር ካለ እናጸዳለን (Refresh እንዲሆን)
-    await TakenNumber.deleteMany({ userId: ctx.from.id });
-
+bot.action('select_bingo_main', (ctx) => {
     ctx.editMessageText(
         `🎯 **የቢንጎ ጨዋታ - የውርርድ መጠን ይምረጡ:**\n\nእባክዎ መጫወት የሚፈልጉትን የብር መጠን ይምረጡ:`,
         Markup.inlineKeyboard([
@@ -311,47 +335,49 @@ bot.action('select_bingo_main', async (ctx) => {
 
 bot.action(/play_(\d+)/, async (ctx) => {
     const userId = ctx.from.id;
-    // ጨዋታ ከመጀመሩ በፊት የዚህ ተጫዋች አሮጌ የተያዙ ቁጥሮች ካሉ እናጸዳለን
-    await TakenNumber.deleteMany({ userId });
-
     const cost = parseInt(ctx.match[1]);
-    let keyboard = await getBingo1to100Keyboard();
+    let user = await getOrCreateUser(userId);
+
+    if (userId !== ADMIN_ID && user.balance < cost) {
+        return ctx.answerCbQuery(`❌ በቂ ባላንስ የለዎትም! (የሚጠበቀው: ETB ${cost}, ያሎት: ETB ${user.balance})`, { show_alert: true });
+    }
+
+    userSelectedBingoCost[userId] = cost;
+    let keyboard = await getBingo1to75Keyboard();
     ctx.editMessageText(
-        `🎯 **የቢንጎ ጨዋታ (ETB ${cost})**\n\nከዚህ በታች ካሉት **ከ 1 እስከ 100** ቁጥሮች ውስጥ የሚፈልጉትን አንድ ቁጥር ይምረጡ:`,
+        `🎯 **የቢንጎ ጨዋታ (ETB ${cost})**\n\nከዚህ በታች ካሉት ቁጥሮች ውስጥ የሚፈልጉትን አንድ ቁጥር ይምረጡ:`,
         keyboard
     );
 });
 
 bot.action(/b_taken_(\d+)/, async (ctx) => {
     const num = parseInt(ctx.match[1]);
-    return ctx.answerCbQuery(`⚠️ ይቅርታ! ቁጥር ${num} በሌላ ተጫዋች ተይዟል!`, { show_alert: true });
+    const dispNum = getFormattedBingoNumber(num);
+    return ctx.answerCbQuery(`⚠️ ይቅርታ! ቁጥር ${dispNum} በሌላ ተጫዋች ተይዟል!`, { show_alert: true });
 });
 
 bot.action(/b_pick_(\d+)/, async (ctx) => {
     const userId = ctx.from.id;
     const userName = ctx.from.first_name || 'ተጫዋች';
     const num = parseInt(ctx.match[1]);
+    const dispNum = getFormattedBingoNumber(num);
+
+    let cost = userSelectedBingoCost[userId] || 10;
+    let user = await getOrCreateUser(userId);
+
+    if (userId !== ADMIN_ID && user.balance < cost) {
+        return ctx.answerCbQuery(`❌ በቂ ባላንስ የለዎትም! (ሒሳብዎ ${user.balance} ብር ነው)`, { show_alert: true });
+    }
 
     try {
         let existing = await TakenNumber.findOne({ number: num });
         if (existing) {
-            let updatedKb = await getBingo1to100Keyboard();
+            let updatedKb = await getBingo1to75Keyboard();
             await ctx.editMessageText(`⚠️ ይህ ቁጥር አሁን በሌላ ተጫዋች ተይዟል!`, updatedKb);
             return ctx.answerCbQuery(`❌ ቁጥሩ ተይዟል!`, { show_alert: true });
         }
 
-        // ተጫዋቹ ከዚህ በፊት የመረጠው ሌላ ቁጥር ካለ እናስወግዳለን (በአንድ ጊዜ 1 ቁጥር ብቻ መምረጥ እንዲችል)
-        await TakenNumber.deleteMany({ userId });
-
         await TakenNumber.create({ number: num, userId, userName });
-
-        let user = await getOrCreateUser(userId);
-        let cost = 10; 
-
-        if (userId !== ADMIN_ID && user.balance < cost) {
-            await TakenNumber.findOneAndDelete({ number: num });
-            return ctx.answerCbQuery('❌ በቂ ባላንስ የለዎትም!', { show_alert: true });
-        }
 
         if (userId !== ADMIN_ID) {
             user.balance -= cost;
@@ -361,10 +387,15 @@ bot.action(/b_pick_(\d+)/, async (ctx) => {
 
         let matrix = generateRandomBingoCard();
         if (!waitingRoom[cost]) waitingRoom[cost] = [];
-        waitingRoom[cost].push({ userId, ctx, matrix, cost, chosenNumber: num });
+        waitingRoom[cost].push({ userId, ctx, matrix, cost });
+
+        let currentPlayersCount = waitingRoom[cost].length;
+        let estimatedPool = cost * currentPlayersCount;
 
         await ctx.editMessageText(
-            `⏳ **ቁጥር ${num} ተመርጧል! ተጫዋቾችን በመጠበቅ ላይ (30 ሰከንድ)...**`,
+            `⏳ **ቁጥር ${dispNum} ተመርጧል! ተጫዋቾችን በመጠበቅ ላይ...**\n` +
+            `👥 የተጫዋቾች ብዛት: **${currentPlayersCount}**\n` +
+            `💰 አጠቃላይ ፖል (Pool): **ETB ${estimatedPool}**`,
             Markup.inlineKeyboard([])
         );
 
@@ -382,9 +413,6 @@ function runBingoQueue(cost) {
 
         if (room.length < 2) {
             for (let p of room) {
-                // ቁጥሮቹን ከ TakenNumber ማጽዳት (ጨዋታው ሳይጀምር ሲቀር)
-                await TakenNumber.deleteMany({ userId: p.userId });
-
                 if (p.userId !== ADMIN_ID) {
                     let pUser = await getOrCreateUser(p.userId);
                     pUser.balance += p.cost; 
@@ -404,9 +432,11 @@ function runBingoQueue(cost) {
         let gameId = 'game_' + Date.now() + '_' + cost;
         let drawnHistory = [];
         let roomPlayers = room.map(p => p.userId);
+        
         let totalPool = cost * roomPlayers.length;
-        let adminCommission = totalPool * 0.10;
-        let winnerReward = Math.round(totalPool - adminCommission);
+        let adminCommission = totalPool * 0.10; // 10% ለአድሚን
+        let winnerReward = Math.round(totalPool - adminCommission); // 90% ለአሸናፊው
+
         let availableNumbers = Array.from({ length: 75 }, (_, i) => i + 1);
         
         let firstDrawn = availableNumbers.splice(Math.floor(Math.random() * availableNumbers.length), 1)[0];
@@ -420,12 +450,15 @@ function runBingoQueue(cost) {
                 roomPlayers, winnerReward, totalPool
             };
 
+            let formattedHistoryText = drawnHistory.map(n => getFormattedBingoNumber(n)).join(', ');
+            let formattedFirstDrawn = getFormattedBingoNumber(firstDrawn);
+
             try {
                 await p.ctx.editMessageText(
                     `🎲 **የቢንጎ ጨዋታ ተጀምሯል! (ETB ${p.cost})**\n` +
-                    `💰 አጠቃላይ ፖል: **ETB ${totalPool}** (ሽልማት: ${winnerReward})\n` +
-                    `📜 **ታሪክ:** [ ${drawnHistory.join(', ')} ]\n` +
-                    `🟢 **አሁንቁጥር: [ ${firstDrawn} ]**`,
+                    `💰 አጠቃላይ ፖል: **ETB ${totalPool}** | አሸናፊ ሽልማት: **ETB ${winnerReward}**\n` +
+                    `📜 **ታሪክ:** [ ${formattedHistoryText} ]\n` +
+                    `🟢 **አሁንቁጥር: [ ${formattedFirstDrawn} ]**`,
                     getBingoKeyboard(p.matrix)
                 );
             } catch (e) {}
@@ -440,11 +473,15 @@ function runBingoQueue(cost) {
                 currentGame.drawnNumber = newNum;
                 currentGame.drawnHistory.push(newNum);
 
+                let formattedHist = currentGame.drawnHistory.map(n => getFormattedBingoNumber(n)).join(', ');
+                let formattedCurrent = getFormattedBingoNumber(newNum);
+
                 try {
                     await p.ctx.editMessageText(
                         `🎲 **ጨዋታ በሂደት ላይ... (ETB ${p.cost})**\n` +
-                        `📜 **ታሪክ:** [ ${currentGame.drawnHistory.join(', ')} ]\n` +
-                        `🟢 **አሁንቁጥር: [ ${newNum} ]**`,
+                        `💰 አጠቃላይ ፖል: **ETB ${currentGame.totalPool}** | አሸናፊ ሽልማት: **ETB ${currentGame.winnerReward}**\n` +
+                        `📜 **ታሪክ:** [ ${formattedHist} ]\n` +
+                        `🟢 **አሁንቁጥር: [ ${formattedCurrent} ]**`,
                         getBingoKeyboard(currentGame.matrix)
                     );
                 } catch (e) {}
@@ -471,7 +508,7 @@ bot.action(/keno_bet_(\d+)/, async (ctx) => {
     let user = await getOrCreateUser(userId);
 
     if (userId !== ADMIN_ID && user.balance < betAmount) {
-        return ctx.answerCbQuery(`❌ በቂ ባላንስ የለዎትም!`, { show_alert: true });
+        return ctx.answerCbQuery(`❌ በቂ ባላንስ የለዎትም! (የሚጠበቀው: ETB ${betAmount})`, { show_alert: true });
     }
 
     kenoSessions[userId] = { selectedNumbers: [], betAmount: betAmount };
@@ -484,16 +521,14 @@ bot.action('view_payout_table', (ctx) => {
     ctx.answerCbQuery();
     ctx.reply(
         `📊 **የኬኖ ጨዋታ ኦፊሴላዊ የሽልማት ሰንጠረዥ (Payout Table)**\n\n` +
-        `• **2 ቁጥር መርጦ 1 ሲመታ:** ያስያዙት ገንዘብ ተመላሽ (Refund)\n` +
-        `• **3 ቁጥር መርጦ 2 ሲመታ:** ሽልማት አለው (Partial Win)\n` +
-        `• **4 ቁጥር መርጦ 2 ሲመታ:** ትንሽ ሽልማት አለው (Partial Win)\n\n` +
-        `• **1 ቁጥር መርጦ:** 0.5x\n` +
-        `• **2 ቁጥር መርጦ:** 1.2x\n` +
-        `• **3 ቁጥር መርጦ:** 1.6x\n` +
-        `• **4 ቁጥር መርጦ:** 2.2x\n` +
-        `• **5 ቁጥር መርጦ:** 2.8x\n` +
-        `• **6 ቁጥር መርጦ:** 3.5x\n` +
-        `• **7 ቁጥር መርጦ:** 4.5x\n` +
+        `• **2 ቁጥር መርጦ 1 ሲመታ:** ተመላሽ (Refund)\n` +
+        `• **1 ቁጥር መርጦ:** 0.2x\n` +
+        `• **2 ቁጥር መርጦ:** 0.3x\n` +
+        `• **3 ቁጥር መርጦ:** 0.5x\n` +
+        `• **4 ቁጥር መርጦ:** 0.8x\n` +
+        `• **5 ቁጥር መርጦ:** 1.2x\n` +
+        `• **6 ቁጥር መርጦ:** 2.0x\n` +
+        `• **7 ቁጥር መርጦ:** 3.5x\n` +
         `• **8 ቁጥር መርጦ:** 6.0x\n` +
         `• **9 ቁጥር መርጦ:** 10.0x\n` +
         `• **10 ቁጥር መርጦ:** 20.0x`,
@@ -595,23 +630,21 @@ bot.action('start_keno_draw', async (ctx) => {
                 if (selectedCount === 10) { multiplier = 20; }
                 else if (selectedCount === 9) { multiplier = 10; }
                 else if (selectedCount === 8) { multiplier = 6; }
-                else if (selectedCount === 7) { multiplier = 4.5; }
-                else if (selectedCount === 6) { multiplier = 3.5; }
-                else if (selectedCount === 5) { multiplier = 2.8; }
-                else if (selectedCount === 4) { multiplier = 2.2; }
-                else if (selectedCount === 3) { multiplier = 1.6; }
-                else if (selectedCount === 2) { multiplier = 1.2; }
-                else if (selectedCount === 1) { multiplier = 0.5; }
+                else if (selectedCount === 7) { multiplier = 3.5; }
+                else if (selectedCount === 6) { multiplier = 2; }
+                else if (selectedCount === 5) { multiplier = 1.2; }
+                else if (selectedCount === 4) { multiplier = 0.8; }
+                else if (selectedCount === 3) { multiplier = 0.5; }
+                else if (selectedCount === 2) { multiplier = 0.3; }
+                else if (selectedCount === 1) { multiplier = 0.2; }
 
                 winAmount = Math.round(betAmount + (betAmount * multiplier));
             } 
             else if (selectedCount === 4 && matchCount === 2) {
-                let multiplier = 1.02; 
-                winAmount = Math.round(betAmount + (betAmount * multiplier));
+                winAmount = Math.round(betAmount + (betAmount * 0.2));
             }
             else if (selectedCount === 3 && matchCount === 2) {
-                let multiplier = 1.2; 
-                winAmount = Math.round(betAmount + (betAmount * multiplier));
+                winAmount = Math.round(betAmount + (betAmount * 0.5));
             }
             else if (selectedCount === 2 && matchCount === 1) {
                 isRefund = true;
@@ -672,10 +705,7 @@ bot.action('start_keno_draw', async (ctx) => {
     }, 3000);
 });
 
-bot.action('back_to_main_menu', async (ctx) => {
-    // ወደ ዋናው ሜኑ ሲመለስ የያዛቸውን የቢንጎ ሰሌዳ ቁጥሮች በሙሉ እናጸዳለን
-    await TakenNumber.deleteMany({ userId: ctx.from.id });
-
+bot.action('back_to_main_menu', (ctx) => {
     ctx.editMessageText(`🎲 **እፉዬ ጨዋታዎች ማዕከል**\n\nእባክዎ የሚፈልጉትን ጨዋታ ይምረጡ፦`, Markup.inlineKeyboard([
         [Markup.button.callback('🎯 ቢንጎ ጨዋታ (Bingo)', 'select_bingo_main')],
         [Markup.button.callback('🎲 ኬኖ ጨዋታ (Keno)', 'select_keno')]
@@ -694,7 +724,7 @@ bot.hears('💰 ዲፖዚት (Deposit)', async (ctx) => {
     }
 
     userSteps[userId] = { action: 'deposit_amount' };
-    ctx.reply(`${ADMIN_PAYMENT_INFO}\n💰 እባክዎ **ሊያስገቡት (ዲፖዚት ላደረጉት) የሚፈልጉትን የብር መጠን** ቁጥር ብቻ ይጻፉ:`);
+    ctx.reply(`${ADMIN_PAYMENT_INFO}\n💰 እባክዎ **ሊያስገቡት የሚፈልጉትን የብር መጠን** ቁጥር ብቻ ይጻፉ:`);
 });
 
 bot.hears('💳 ዊዝድሮ (Withdraw)', async (ctx) => {
@@ -749,7 +779,7 @@ bot.hears('📊 የአድሚን ባላንስ ማየት', async (ctx) => {
 bot.hears('👥 የተጫዋቾች ዝርዝር (Player List)', async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     let users = await User.find().sort({ _id: -1 }).limit(20);
-    if (users.length === 0) return ctx.reply('📭 እስካሁን የተመዝገበ ተጫዋች የለም።', adminKeyboard);
+    if (users.length === 0) return ctx.reply('📭 እስካሁን የተመዘገበ ተጫዋች የለም።', adminKeyboard);
     ctx.reply(`👥 **የተጫዋቾች ዝርዝር:**`, adminKeyboard);
     for (let [index, u] of users.entries()) {
         let playerInfo = `👤 **${index + 1}. ስም:** ${u.userName}\n🆔 **ID:** \`${u.userId}\`\n📱 **ስልክ:** ${u.phone || 'N/A'}\n💰 **ባላንስ:** ETB ${u.balance}`;
@@ -835,14 +865,21 @@ bot.action(/cell_(\d+)_(\d+)/, async (ctx) => {
 
     if (cell.isFree) return ctx.answerCbQuery('⭐ ይህ ነፃ ካርድ ነው!', { show_alert: true });
 
-    if (game.drawnHistory.includes(cell.number)) {
+    if (game.drawnHistory.includes(cell.rawNum)) {
         cell.marked = !cell.marked;
+        let formattedHist = game.drawnHistory.map(n => getFormattedBingoNumber(n)).join(', ');
+        let formattedCurrent = getFormattedBingoNumber(game.drawnNumber);
+
         ctx.editMessageText(
-            `🎲 **ጨዋታ በሂደት ላይ...**\n📜 **ታሪክ:** [ ${game.drawnHistory.join(', ')} ]\n🟢 **አሁንቁጥር: [ ${game.drawnNumber} ]**`,
+            `🎲 **ጨዋታ በሂደት ላይ...**\n` +
+            `💰 አጠቃላይ ፖል: **ETB ${game.totalPool}** | ሽልማት: **ETB ${game.winnerReward}**\n` +
+            `📜 **ታሪክ:** [ ${formattedHist} ]\n` +
+            `🟢 **አሁንቁጥር: [ ${formattedCurrent} ]**`,
             getBingoKeyboard(game.matrix)
         ).catch(() => {});
     } else {
-        return ctx.answerCbQuery(`❌ ይህ ቁጥር ገና አልተጠራም!`, { show_alert: true });
+        let dispNum = getFormattedBingoNumber(cell.rawNum);
+        return ctx.answerCbQuery(`❌ ይህ ቁጥር (${dispNum}) ገና አልተጠራም!`, { show_alert: true });
     }
 });
 
@@ -854,20 +891,19 @@ bot.action('check_bingo', async (ctx) => {
     let game = activeGames[userId];
     if (checkWinCondition(game.matrix)) {
         let winnerUser = await getOrCreateUser(userId);
-        winnerUser.balance += game.winnerReward;
+        winnerUser.balance += game.winnerReward; // 90% ለአሸናፊው ገቢ ሆኗል
         winnerUser.wins += 1;
         winnerUser.level += 1; 
         await winnerUser.save();
 
-        // ጨዋታው ሲጠናቀቅ የሁሉም ተጫዋቾች የተያዙ ቁጥሮች ከዳታቤዝ ይሰረዛሉ
         for (let pId of game.roomPlayers) {
-            await TakenNumber.deleteMany({ userId: pId });
-
             if (activeGames[pId]) {
                 activeGames[pId].gameActive = false;
                 delete activeGames[pId];
             }
-            let msg = (pId === userId) ? `🎉 **እንኳን ደስ አሎት! BINGO ብለዋል!**\n💰 ሽልማት: **ETB ${game.winnerReward}**` : `🏁 ጨዋታው አልቋል! ሌላ ተጫዋች አሸንፏል።`;
+            let msg = (pId === userId) 
+                ? `🎉 **እንኳን ደስ አሎት! BINGO ብለዋል!**\n💰 ያሸነፉት ሽልማት (10% አድሚን ተቆርጦ): **ETB ${game.winnerReward}**` 
+                : `🏁 ጨዋታው አልቋል! ሌላ ተጫዋች አሸንፏል።`;
             bot.telegram.sendMessage(pId, msg).catch(()=>{});
         }
         ctx.answerCbQuery('🏆 እንኳን ደስ አሎት!');
@@ -1057,4 +1093,4 @@ bot.on('text', async (ctx) => {
 });
 
 bot.launch();
-console.log('🤖 Bot is running smoothly with clean Bingo taken numbers!');
+console.log('🤖 Bot is running successfully with all requested updates!');
