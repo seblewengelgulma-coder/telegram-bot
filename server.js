@@ -83,7 +83,7 @@ const ADMIN_PAYMENT_INFO = `🏦 **የአድሚን የክፍያ አካውንቶ�
 
 let userSteps = {}; 
 let activeGames = {}; 
-let waitingRoom = {}; // በዋጋ የተከፋፈለ የሰዎች ማቆያ (የባለ 10፣ 20፣ 50፣ 100 ለየብቻ)
+let waitingRoom = {}; 
 let kenoSessions = {}; 
 let userSelectedBingoCost = {}; 
 
@@ -216,7 +216,7 @@ function generateRandomBingoCard() {
             } else {
                 let rawNum = columns[c][r];
                 let dispText = getFormattedBingoNumber(rawNum);
-                // እዚህ ጋር marked: false መሆኑ አዲስ ጨዋታ ሲጀመር ሁልጊዜ ባዶ እንዲሆን ያረጋግጣል
+                // ሁልጊዜ አዲስ ካርድ ሲፈጠር ማርኩ ባዶ (false) ሆኖ እንዲጀምር ይደረጋል
                 row.push({ number: rawNum, rawNum: rawNum, marked: false, isFree: false, display: dispText });
             }
         }
@@ -430,13 +430,16 @@ function runBingoQueue(cost) {
 
         delete waitingRoom[cost];
 
+        // 🛑 አዲስ ጨዋታ ሲጀመር የድሮ የተያዙ ቁጥሮች ከዳታቤዝ ሙሉ በሙሉ እንዲጸዱ ይደረጋል
+        await TakenNumber.deleteMany({});
+
         let gameId = 'game_' + Date.now() + '_' + cost;
         let drawnHistory = [];
         let roomPlayers = room.map(p => p.userId);
         
         let totalPool = cost * roomPlayers.length;
-        let adminCommission = totalPool * 0.10; // 10% ለአድሚን
-        let winnerReward = Math.round(totalPool - adminCommission); // 90% ለአሸናፊው
+        let adminCommission = totalPool * 0.10; 
+        let winnerReward = Math.round(totalPool - adminCommission); 
 
         let availableNumbers = Array.from({ length: 75 }, (_, i) => i + 1);
         
@@ -444,8 +447,6 @@ function runBingoQueue(cost) {
         drawnHistory.push(firstDrawn);
 
         for (let p of room) {
-            // እዚህ ጋር ጨዋታው አዲስ ሲጀምር የካርዱ ማርኮች በሙሉ 
-            // ወደ አዲስ (ባዶ) ማትሪክስ እንለውጠዋለን (ማርክ እንዳይኖር)፦
             let freshMatrix = generateRandomBingoCard();
 
             activeGames[p.userId] = { 
@@ -904,7 +905,7 @@ bot.action('check_bingo', async (ctx) => {
         for (let pId of game.roomPlayers) {
             if (activeGames[pId]) {
                 activeGames[pId].gameActive = false;
-                delete activeGames[pId]; // የድሮውን ጨዋታ ሜሞሪ እና ማርክ ሙሉ በሙሉ ማጽዳት
+                delete activeGames[pId]; 
             }
             let msg = (pId === userId) 
                 ? `🎉 **እንኳን ደስ አሎት! BINGO ብለዋል!**\n💰 ያሸነፉት ሽልማት (10% አድሚን ተቆርጦ): **ETB ${game.winnerReward}**` 
