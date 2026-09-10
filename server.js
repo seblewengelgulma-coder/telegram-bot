@@ -216,6 +216,7 @@ function generateRandomBingoCard() {
             } else {
                 let rawNum = columns[c][r];
                 let dispText = getFormattedBingoNumber(rawNum);
+                // እዚህ ጋር marked: false መሆኑ አዲስ ጨዋታ ሲጀመር ሁልጊዜ ባዶ እንዲሆን ያረጋግጣል
                 row.push({ number: rawNum, rawNum: rawNum, marked: false, isFree: false, display: dispText });
             }
         }
@@ -448,7 +449,7 @@ function runBingoQueue(cost) {
             let freshMatrix = generateRandomBingoCard();
 
             activeGames[p.userId] = { 
-                gameId, matrix: freshMatrix, cost: p.cost, // አዲሱን ባዶ ማትሪክስ ተጠቀምን
+                gameId, matrix: freshMatrix, cost: p.cost, 
                 drawnNumber: firstDrawn, drawnHistory: [...drawnHistory],
                 availableNumbers: [...availableNumbers], gameActive: true,
                 roomPlayers, winnerReward, totalPool
@@ -895,7 +896,7 @@ bot.action('check_bingo', async (ctx) => {
     let game = activeGames[userId];
     if (checkWinCondition(game.matrix)) {
         let winnerUser = await getOrCreateUser(userId);
-        winnerUser.balance += game.winnerReward; // 90% ለአሸናፊው ገቢ ሆኗል
+        winnerUser.balance += game.winnerReward; 
         winnerUser.wins += 1;
         winnerUser.level += 1; 
         await winnerUser.save();
@@ -903,7 +904,7 @@ bot.action('check_bingo', async (ctx) => {
         for (let pId of game.roomPlayers) {
             if (activeGames[pId]) {
                 activeGames[pId].gameActive = false;
-                delete activeGames[pId];
+                delete activeGames[pId]; // የድሮውን ጨዋታ ሜሞሪ እና ማርክ ሙሉ በሙሉ ማጽዳት
             }
             let msg = (pId === userId) 
                 ? `🎉 **እንኳን ደስ አሎት! BINGO ብለዋል!**\n💰 ያሸነፉት ሽልማት (10% አድሚን ተቆርጦ): **ETB ${game.winnerReward}**` 
