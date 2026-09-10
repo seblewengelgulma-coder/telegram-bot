@@ -216,7 +216,7 @@ function generateRandomBingoCard() {
             } else {
                 let rawNum = columns[c][r];
                 let dispText = getFormattedBingoNumber(rawNum);
-                // ሁልጊዜ አዲስ ካርድ ሲፈጠር ማርኩ ባዶ (false) ሆኖ እንዲጀምር ይደረጋል
+                // ሙሉ በሙሉ ማርኮቹ ባዶ (false) ሆኖ እንዲጀምር ተደርጓል
                 row.push({ number: rawNum, rawNum: rawNum, marked: false, isFree: false, display: dispText });
             }
         }
@@ -327,6 +327,7 @@ bot.action('select_bingo_main', (ctx) => {
     ctx.editMessageText(
         `🎯 **የቢንጎ ጨዋታ - የውርርድ መጠን ይምረጡ:**\n\nእባክዎ መጫወት የሚፈልጉትን የብር መጠን ይምረጡ:`,
         Markup.inlineKeyboard([
+             [Markup.button.callback('Play 2 ETB', 'play_2'), Markup.button.callback('Play 5 ETB', 'play_5')],
             [Markup.button.callback('Play 10 ETB', 'play_10'), Markup.button.callback('Play 20 ETB', 'play_20')],
             [Markup.button.callback('Play 50 ETB', 'play_50'), Markup.button.callback('Play 100 ETB', 'play_100')],
             [Markup.button.callback('🔙 ወደ ዋናው ሜኑ', 'back_to_main_menu')]
@@ -447,6 +448,7 @@ function runBingoQueue(cost) {
         drawnHistory.push(firstDrawn);
 
         for (let p of room) {
+            // 🛑 አዲስ ጨዋታ ሲጀመር ሙሉ በሙሉ አዲስ እና ማርክ የሌለው (marked: false) ማትሪክስ ይፈጠራል
             let freshMatrix = generateRandomBingoCard();
 
             activeGames[p.userId] = { 
@@ -500,7 +502,6 @@ bot.action('select_keno', (ctx) => {
     ctx.editMessageText(
         `🎲 **የኬኖ ጨዋታ - የውርርድ መጠን ይምረጡ:**\n\nእባክዎ መጫወት የሚፈልጉትን የብር መጠን ይምረጡ:`,
         Markup.inlineKeyboard([
-            [Markup.button.callback('2 ETB', 'keno_bet_2'), Markup.button.callback('5 ETB', 'keno_bet_5')],
             [Markup.button.callback('10 ETB', 'keno_bet_10'), Markup.button.callback('20 ETB', 'keno_bet_20')],
             [Markup.button.callback('50 ETB', 'keno_bet_50'), Markup.button.callback('100 ETB', 'keno_bet_100')],
             [Markup.button.callback('🔙 ወደ ዋናው ሜኑ', 'back_to_main_menu')]
