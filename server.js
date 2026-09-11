@@ -216,7 +216,6 @@ function generateRandomBingoCard() {
             } else {
                 let rawNum = columns[c][r];
                 let dispText = getFormattedBingoNumber(rawNum);
-                // ሙሉ በሙሉ ማርኮቹ ባዶ (false) ሆኖ እንዲጀምር ተደርጓል
                 row.push({ number: rawNum, rawNum: rawNum, marked: false, isFree: false, display: dispText });
             }
         }
@@ -412,6 +411,7 @@ function runBingoQueue(cost) {
         let room = waitingRoom[cost];
         if (!room) return;
 
+        // ተጫዋች ሳይኖር ጨዋታው ከተቋረጠ
         if (room.length < 2) {
             for (let p of room) {
                 if (p.userId !== ADMIN_ID) {
@@ -425,12 +425,14 @@ function runBingoQueue(cost) {
                 } catch (e) {}
             }
             delete waitingRoom[cost];
+            // 🛑 በቂ ተጫዋች አጥቶ ጨዋታው ሲሰረዝ የተያዙ ቁጥሮች በሙሉ ከዳታቤዝ እንዲጸዱ ይደረጋል
+            await TakenNumber.deleteMany({});
             return;
         }
 
         delete waitingRoom[cost];
 
-        // 🛑 አዲስ ጨዋታ ሲጀመር የድሮ የተያዙ ቁጥሮች ከዳታቤዝ ሙሉ በሙሉ እንዲጸዱ ይደረጋል
+        // 🛑 አዲስ ጨዋታ ሲጀመር የቀደሙ የተያዙ ቁጥሮች በሙሉ ከዳታቤዝ ይጸዳሉ
         await TakenNumber.deleteMany({});
 
         let gameId = 'game_' + Date.now() + '_' + cost;
@@ -447,7 +449,6 @@ function runBingoQueue(cost) {
         drawnHistory.push(firstDrawn);
 
         for (let p of room) {
-            // 🛑 አዲስ ጨዋታ ሲጀመር ሙሉ በሙሉ አዲስ እና ማርክ የሌለው (marked: false) ማትሪክስ ይፈጠራል
             let freshMatrix = generateRandomBingoCard();
 
             activeGames[p.userId] = { 
@@ -529,13 +530,13 @@ bot.action('view_payout_table', (ctx) => {
     ctx.reply(
         `📊 **የኬኖ ጨዋታ ኦፊሴላዊ የሽልማት ሰንጠረዥ (Payout Table)**\n\n` +
         `• **2 ቁጥር መርጦ 1 ሲመታ:** ተመላሽ (Refund)\n` +
-        `• **1 ቁጥር መርጦ:** 0.2x\n` +
-        `• **2 ቁጥር መርጦ:** 0.3x\n` +
-        `• **3 ቁጥር መርጦ:** 0.5x\n` +
-        `• **4 ቁጥር መርጦ:** 0.8x\n` +
-        `• **5 ቁጥር መርጦ:** 1.2x\n` +
-        `• **6 ቁጥር መርጦ:** 2.0x\n` +
-        `• **7 ቁጥር መርጦ:** 3.5x\n` +
+        `• **1 ቁጥር መርጦ:** 0.5x\n` +
+        `• **2 ቁጥር መርጦ:** 1.2x\n` +
+        `• **3 ቁጥር መርጦ:** 1.6x\n` +
+        `• **4 ቁጥር መርጦ:** 2.2x\n` +
+        `• **5 ቁጥር መርጦ:** 2.8x\n` +
+        `• **6 ቁጥር መርጦ:** 3.5x\n` +
+        `• **7 ቁጥር መርጦ:** 4.5x\n` +
         `• **8 ቁጥር መርጦ:** 6.0x\n` +
         `• **9 ቁጥር መርጦ:** 10.0x\n` +
         `• **10 ቁጥር መርጦ:** 20.0x`,
@@ -637,21 +638,21 @@ bot.action('start_keno_draw', async (ctx) => {
                 if (selectedCount === 10) { multiplier = 20; }
                 else if (selectedCount === 9) { multiplier = 10; }
                 else if (selectedCount === 8) { multiplier = 6; }
-                else if (selectedCount === 7) { multiplier = 3.5; }
-                else if (selectedCount === 6) { multiplier = 2; }
-                else if (selectedCount === 5) { multiplier = 1.2; }
-                else if (selectedCount === 4) { multiplier = 0.8; }
-                else if (selectedCount === 3) { multiplier = 0.5; }
-                else if (selectedCount === 2) { multiplier = 0.3; }
-                else if (selectedCount === 1) { multiplier = 0.2; }
+                else if (selectedCount === 7) { multiplier = 4.5; }
+                else if (selectedCount === 6) { multiplier = 3.5; }
+                else if (selectedCount === 5) { multiplier = 2.8; }
+                else if (selectedCount === 4) { multiplier = 2.2; }
+                else if (selectedCount === 3) { multiplier = 1.6; }
+                else if (selectedCount === 2) { multiplier = 1.2; }
+                else if (selectedCount === 1) { multiplier = 0.5; }
 
                 winAmount = Math.round(betAmount + (betAmount * multiplier));
             } 
             else if (selectedCount === 4 && matchCount === 2) {
-                winAmount = Math.round(betAmount + (betAmount * 0.2));
+                winAmount = Math.round(betAmount + (betAmount *1.05));
             }
             else if (selectedCount === 3 && matchCount === 2) {
-                winAmount = Math.round(betAmount + (betAmount * 0.5));
+                winAmount = Math.round(betAmount + (betAmount *1.2));
             }
             else if (selectedCount === 2 && matchCount === 1) {
                 isRefund = true;
@@ -913,6 +914,10 @@ bot.action('check_bingo', async (ctx) => {
                 : `🏁 ጨዋታው አልቋል! ሌላ ተጫዋች አሸንፏል።`;
             bot.telegram.sendMessage(pId, msg).catch(()=>{});
         }
+
+        // 🛑 ጨዋታው በአሸናፊነት ሲጠናቀቅ የተያዙ ቁጥሮች በሙሉ ከዳታቤዝ እንዲጸዱ ይደረጋል
+        await TakenNumber.deleteMany({});
+
         ctx.answerCbQuery('🏆 እንኳን ደስ አሎት!');
     } else {
         return ctx.answerCbQuery('❌ ገና BINGO አልሞሉም!', { show_alert: true });
