@@ -130,13 +130,13 @@ function getKenoStatusText(selectedNumbers, betAmount, userBalance) {
     if (count === 10) { multiplier = 20; }
     else if (count === 9) { multiplier = 10; }
     else if (count === 8) { multiplier = 6; }
-    else if (count === 7) { multiplier = 3.5; }
-    else if (count === 6) { multiplier = 2; }
-    else if (count === 5) { multiplier = 1.2; }
-    else if (count === 4) { multiplier = 0.8; }
-    else if (count === 3) { multiplier = 0.5; }
-    else if (count === 2) { multiplier = 0.3; }
-    else if (count === 1) { multiplier = 0.2; }
+    else if (count === 7) { multiplier = 4.5; }
+    else if (count === 6) { multiplier = 3.5; }
+    else if (count === 5) { multiplier = 2.8; }
+    else if (count === 4) { multiplier =2.2; }
+    else if (count === 3) { multiplier = 1.6; }
+    else if (count === 2) { multiplier = 1.2; }
+    else if (count === 1) { multiplier = 0.5; }
 
     let potentialWin = Math.round(betAmount + (betAmount * multiplier));
 
