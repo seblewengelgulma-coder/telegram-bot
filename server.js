@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const { Telegraf, Markup } = require('telegraf');
 const mongoose = require('mongoose');
-const cron = require('node-cron'); // 🆕 ለቶርናመንት ጊዜ ቆጣሪ የተጨመረ
+const cron = require('node-cron');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -33,9 +33,9 @@ const userSchema = new mongoose.Schema({
     balance: { type: Number, default: 0 },
     totalGames: { type: Number, default: 0 },
     wins: { type: Number, default: 0 },
-    dailyWins: { type: Number, default: 0 },      // 🆕 የዕለቱ ድሎች መቁጠሪያ
-    weeklyWins: { type: Number, default: 0 },     // 🆕 የሳምንቱ አጠቃላይ ድሎች
-    qualifiedDays: { type: Number, default: 0 },  // 🆕 ተጫዋቹ ብቁ የሆነባቸው ቀናት ብዛት
+    dailyWins: { type: Number, default: 0 },
+    weeklyWins: { type: Number, default: 0 },
+    qualifiedDays: { type: Number, default: 0 },
     losses: { type: Number, default: 0 },
     level: { type: Number, default: 1 }
 });
@@ -80,7 +80,7 @@ if (!TOKEN) {
 
 const bot = new Telegraf(TOKEN);
 const ADMIN_ID = 380035906;
-const DAILY_WIN_GOAL = 3; // 🎯 ለቶርናመንቱ ለማለፍ በቀን ቢያንስ ማሸነፍ ያለበት ገደብ
+const DAILY_WIN_GOAL = 3;
 
 const ADMIN_PAYMENT_INFO = `🏦 **የአድሚን የክፍያ አካውንቶች (ለዲፖዚት)**\n\n` +
     `1. **ንግድ ባንክ (CBE):** 10005741880 (ቴዎድሮስ / እፉዬ)\n` +
@@ -88,7 +88,7 @@ const ADMIN_PAYMENT_INFO = `🏦 **የአድሚን የክፍያ አካውንቶ�
 
 let userSteps = {}; 
 let activeGames = {}; 
-let roomSessions = {}; // የጋራ የጨዋታ ሴሽኖችን ለመያዝ
+let roomSessions = {}; 
 let waitingRoom = {}; 
 let kenoSessions = {}; 
 let userSelectedBingoCost = {}; 
@@ -102,14 +102,12 @@ async function getOrCreateUser(userId, userName = 'ተጫዋች') {
     return user;
 }
 
-// ---------------- 🆕 AUTOMATED CRON JOBS ----------------
-// 1. በየቀኑ እኩለ ሌሊት (12:00 AM) የዕለቱን መቁጠሪያ ማጽዳት
+// ---------------- AUTOMATED CRON JOBS ----------------
 cron.schedule('0 0 * * *', async () => {
     await User.updateMany({}, { dailyWins: 0 });
     console.log('🔄 የዕለቱ የጨዋታ ገደብ ታድሷል (Daily Wins Reset)');
 });
 
-// 2. በየሳምንቱ እሁድ እኩለ ሌሊት (12:00 AM) አሸናፊዎችን መለየት እና ቦነስ መስጠት
 cron.schedule('0 0 * * 0', async () => {
     console.log('🏆 የሳምንቱ ቶርናመንት በማጠናቀቅ ላይ...');
     let winners = await User.find({ qualifiedDays: { $gt: 0 } }).sort({ weeklyWins: -1 }).limit(3);
@@ -190,7 +188,6 @@ function getKenoStatusText(selectedNumbers, betAmount, userBalance) {
            `አካውንት ባላንስ: **ETB ${userBalance}**`;
 }
 
-// የቢንጎ ቁጥር ፊደል ሰጪ
 function getFormattedBingoNumber(num) {
     if (num >= 1 && num <= 15) return `B${num}`;
     if (num >= 16 && num <= 30) return `I${num}`;
@@ -227,11 +224,11 @@ async function getBingo1to75Keyboard() {
 
 function generateRandomBingoCard() {
     let colRanges = [
-        { min: 1, max: 15 },   // B
-        { min: 16, max: 30 },  // I
-        { min: 31, max: 45 },  // N
-        { min: 46, max: 60 },  // G
-        { min: 61, max: 75 }   // O
+        { min: 1, max: 15 },   
+        { min: 16, max: 30 },  
+        { min: 31, max: 45 },  
+        { min: 46, max: 60 },  
+        { min: 61, max: 75 }   
     ];
 
     let columns = colRanges.map(range => {
@@ -308,17 +305,18 @@ function checkWinCondition(matrix) {
 
 const mainKeyboard = Markup.keyboard([
     ['🎮 ፕለይ (Play)'],
-    ['🏆 የሳምንቱ አሸናፊዎች (Leaderboard)'], // 🆕 የተጨመረ
+    ['🏆 የሳምንቱ አሸናፊዎች (Leaderboard)'],
     ['💰 ዲፖዚት (Deposit)', '💳 ዊዝድሮ (Withdraw)'],
     ['👤 ፕሮፋይል (Profile)', '💬 ኮሜንት (Comment)'],
     ['📖 መመሪያ (Instructions)']
 ]).resize();
 
+// 🆕 አዲስ በተን የተጨመረበት የአድሚን ኪቦርድ
 const adminKeyboard = Markup.keyboard([
     ['📊 የአድሚን ባላንስ ማየት', '👥 የተጫዋቾች ዝርዝር (Player List)'],
     ['📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', '💬 የተጫዋቾች ኮሜንቶች'],
-    ['💵 አድሚን ዲፖዚት ማድረግ', '🎮 አድሚን መጫወቻ (Admin Play)'],
-    ['🔙 ወደ ዋናው ሜኑ ተመለስ']
+    ['🥇 የዕለቱ ከፍተኛ አሸናፊዎች', '🎮 አድሚን መጫወቻ (Admin Play)'],
+    ['💵 አድሚን ዲፖዚት ማድረግ', '🔙 ወደ ዋናው ሜኑ ተመለስ']
 ]).resize();
 
 bot.start(async (ctx) => {
@@ -359,7 +357,6 @@ bot.hears('🎮 ፕለይ (Play)', (ctx) => {
     );
 });
 
-// 🆕 የሳምንቱ አሸናፊዎች (Leaderboard) ማሳያ
 bot.hears('🏆 የሳምንቱ አሸናፊዎች (Leaderboard)', async (ctx) => {
     const userId = ctx.from.id;
     let user = await getOrCreateUser(userId);
@@ -762,7 +759,7 @@ bot.action('start_keno_draw', async (ctx) => {
                 else if (selectedCount === 4) { multiplier = 2.2; }
                 else if (selectedCount === 3) { multiplier = 1.6; }
                 else if (selectedCount === 2) { multiplier = 1.2; }
-                else if (selectedCount === 1) { multiplier =0.5; }
+                else if (selectedCount === 1) { multiplier = 0.5; }
 
                 winAmount = Math.round(betAmount + (betAmount * multiplier));
             } 
@@ -785,7 +782,7 @@ bot.action('start_keno_draw', async (ctx) => {
                     user.balance += winAmount;
                     if (!isRefund) {
                         user.wins += 1;
-                        user.dailyWins += 1; // 🆕 ዕለታዊ ድል መቁጠር
+                        user.dailyWins += 1; 
 
                         if (user.dailyWins === DAILY_WIN_GOAL) {
                             user.qualifiedDays += 1;
@@ -931,6 +928,38 @@ bot.hears('👥 የተጫዋቾች ዝርዝር (Player List)', async (ctx) => {
     }
 });
 
+// 🆕 አዲስ የተጨመረ - የዕለቱ ከፍተኛ አሸናፊዎችን ለአድሚን ማሳያ Handler
+bot.hears('🥇 የዕለቱ ከፍተኛ አሸናፊዎች', async (ctx) => {
+    if (ctx.from.id !== ADMIN_ID) return;
+
+    let topDailyWinners = await User.find({ dailyWins: { $gt: 0 } })
+                                    .sort({ dailyWins: -1 })
+                                    .limit(10);
+
+    if (topDailyWinners.length === 0) {
+        return ctx.reply('📭 ዛሬ እስካሁን ያሸነፈ ተጫዋች የለም።', adminKeyboard);
+    }
+
+    let reportMsg = `🥇 **የዕለቱ ከፍተኛ አሸናፊዎች (Daily Top Winners)**\n` +
+                    `📅 ቀን: ${new Date().toLocaleDateString('en-US')}\n` +
+                    `-----------------------------------\n\n`;
+
+    topDailyWinners.forEach((player, index) => {
+        let medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🎖';
+        let qualificationStatus = player.dailyWins >= DAILY_WIN_GOAL 
+            ? '✅ (ለሳምንቱ አልፏል)' 
+            : `⏳ (ገና ${DAILY_WIN_GOAL - player.dailyWins} ድል ይቀረዋል)`;
+
+        reportMsg += `${medal} **${index + 1}. ${player.userName}**\n` +
+                     `   • ID: \`${player.userId}\`\n` +
+                     `   • 📱 ስልክ: ${player.phone || 'N/A'}\n` +
+                     `   • 🎯 የዛሬ ድል: **${player.dailyWins}** ${qualificationStatus}\n` +
+                     `   • 🏆 የሳምንቱ ነጥብ: ${player.weeklyWins}\n\n`;
+    });
+
+    ctx.reply(reportMsg, { parse_mode: 'Markdown', ...adminKeyboard });
+});
+
 bot.hears('📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     let reqs = await RequestModel.find();
@@ -1050,7 +1079,7 @@ bot.action('check_bingo', async (ctx) => {
         let winnerUser = await getOrCreateUser(userId);
         winnerUser.balance += session.winnerReward; 
         winnerUser.wins += 1;
-        winnerUser.dailyWins += 1; // 🆕 ዕለታዊ ድል መቁጠር
+        winnerUser.dailyWins += 1;
 
         if (winnerUser.dailyWins === DAILY_WIN_GOAL) {
             winnerUser.qualifiedDays += 1;
@@ -1265,4 +1294,4 @@ bot.on('text', async (ctx) => {
 });
 
 bot.launch();
-console.log('🤖 Bot is running successfully with Daily Criteria Tournament & Automatic Cron Jobs!');
+console.log('🤖 Bot is running successfully with Admin Daily Top Winners Panel!');
