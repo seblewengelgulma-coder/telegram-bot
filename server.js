@@ -31,7 +31,7 @@ const userSchema = new mongoose.Schema({
     userName: { type: String },
     phone: { type: String, default: null },
     balance: { type: Number, default: 0 },
-    hasReceivedBonus: { type: Boolean, default: false }, // አዲስ ተጫዋች ቦነስ ማግኘቱን የሚያረጋግጥ
+    hasReceivedBonus: { type: Boolean, default: false },
     totalGames: { type: Number, default: 0 },
     wins: { type: Number, default: 0 },
     dailyWins: { type: Number, default: 0 },
@@ -65,7 +65,6 @@ const commentSchema = new mongoose.Schema({
 });
 const CommentModel = mongoose.model('Comment', commentSchema);
 
-// የተያዙ ቁጥሮች ከጨዋታ መለያ (gameId) ጋር እንዲቆራኙ ተደርጓል
 const takenNumberSchema = new mongoose.Schema({
     gameId: { type: String, required: true },
     number: { type: Number, required: true },
@@ -142,7 +141,6 @@ app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
 
-// የኬኖ ኪቦርድ ማመንጫ
 function getKenoKeyboard(selectedNumbers = [], betAmount = 10) {
     let keyboard = [];
     let row = [];
@@ -322,7 +320,7 @@ const adminKeyboard = Markup.keyboard([
     ['💵 አድሚን ዲፖዚት ማድረግ', '🔙 ወደ ዋናው ሜኑ ተመለስ']
 ]).resize();
 
-// --- 4. ቦት ስታርት እና የ 20 ብር ቦነስ አሰራር (Updated) ---
+// --- 4. ቦት ስታርት እና የ 20 ብር ቦነስ አሰራር ---
 bot.start(async (ctx) => {
     const userId = ctx.from.id;
     const userName = ctx.from.first_name || 'ወዳጄ';
@@ -330,7 +328,6 @@ bot.start(async (ctx) => {
     let user = await User.findOne({ userId });
     
     if (!user) {
-        // አዲስ ተጫዋች ሲመዝገብ 20 ብር ቦነስ ይሰጠዋል
         user = new User({ 
             userId, 
             userName, 
@@ -339,7 +336,6 @@ bot.start(async (ctx) => {
         });
         await user.save();
     } else if (!user.hasReceivedBonus) {
-        // ዳታቤዙ ላይ የነበረ ነገር ግን ቦነስ ያልተሰጠው ከሆነ 20 ብር ይጨመርለታል
         user.balance += 20;
         user.hasReceivedBonus = true;
         await user.save();
@@ -486,7 +482,7 @@ bot.action(/b_pick_(.+)_(\d+)/, async (ctx) => {
 
         let isFirstInRoom = waitingRoom[cost].players.length === 0;
 
-        waitingRoom[cost].players.push({ userId, ctx, matrix, cost, pickedNum: dispNum });
+        waitingRoom[cost].players.push({ userId, ctx, matrix, cost, pickedNum: dispNum, messageId: ctx.callbackQuery.message.message_id });
 
         let currentPlayersCount = waitingRoom[cost].players.length;
         let estimatedPool = cost * currentPlayersCount;
@@ -567,9 +563,6 @@ function runBingoQueue(cost, gameId) {
 
             let availableNumbers = Array.from({ length: 75 }, (_, i) => i + 1);
             let drawnHistory = [];
-            
-            let firstDrawn = availableNumbers.splice(Math.floor(Math.random() * availableNumbers.length), 1)[0];
-            drawnHistory.push(firstDrawn);
 
             let roomSession = {
                 gameId: activeGameSessionId,
@@ -579,35 +572,22 @@ function runBingoQueue(cost, gameId) {
                 roomPlayers,
                 drawnHistory,
                 availableNumbers,
-                drawnNumber: firstDrawn,
+                drawnNumber: null,
                 gameActive: true
             };
 
             roomSessions[activeGameSessionId] = roomSession;
 
             for (let p of room) {
-                let freshMatrix = generateRandomBingoCard();
-
                 activeGames[p.userId] = { 
                     gameId: activeGameSessionId,
-                    matrix: freshMatrix,
-                    userId: p.userId
+                    matrix: p.matrix,
+                    userId: p.userId,
+                    messageId: p.messageId
                 };
-
-                let formattedHistoryText = drawnHistory.map(n => getFormattedBingoNumber(n)).join(', ');
-                let formattedFirstDrawn = getFormattedBingoNumber(firstDrawn);
-
-                try {
-                    await p.ctx.editMessageText(
-                        `🎲 **የቢንጎ ጨዋታ ተጀምሯል! (ETB ${p.cost})**\n` +
-                        `💰 አጠቃላይ ፖል: **ETB ${totalPool}** | አሸናፊ ሽልማት: **ETB ${winnerReward}**\n` +
-                        `📜 **ታሪክ:** [ ${formattedHistoryText} ]\n` +
-                        `🟢 **አሁንቁጥር: [ ${formattedFirstDrawn} ]**`,
-                        getBingoKeyboard(freshMatrix)
-                    );
-                } catch (e) {}
             }
 
+            // በየ 6 ሰከንዱ አዳዲስ ቁጥሮች የሚጠሩበት እና ለሁሉም ተጫዋቾች በየወቅቱ መልእክት የሚታደስበት ሉፕ
             let roomInterval = setInterval(async () => {
                 let session = roomSessions[activeGameSessionId];
                 if (!session || !session.gameActive || session.availableNumbers.length === 0) {
@@ -630,15 +610,17 @@ function runBingoQueue(cost, gameId) {
                         try {
                             await bot.telegram.editMessageText(
                                 pId,
-                                undefined,
+                                userGame.messageId,
                                 undefined,
                                 `🎲 **ጨዋታ በሂደት ላይ... (ETB ${session.cost})**\n` +
                                 `💰 አጠቃላይ ፖል: **ETB ${session.totalPool}** | አሸናፊ ሽልማት: **ETB ${session.winnerReward}**\n` +
                                 `📜 **ታሪክ:** [ ${formattedHist} ]\n` +
-                                `🟢 **አሁንቁጥር: [ ${formattedCurrent} ]**`,
+                                `🟢 **አሁን ቁጥር: [ ${formattedCurrent} ]**`,
                                 getBingoKeyboard(userGame.matrix)
                             );
-                        } catch (e) {}
+                        } catch (e) {
+                            console.error(`Error updating player ${pId} board:`, e.message);
+                        }
                     }
                 }
             }, 6000);
@@ -1084,7 +1066,7 @@ bot.action(/cell_(\d+)_(\d+)/, async (ctx) => {
             `🎲 **ጨዋታ በሂደት ላይ... (ETB ${session.cost})**\n` +
             `💰 አጠቃላይ ፖል: **ETB ${session.totalPool}** | ሽልማት: **ETB ${session.winnerReward}**\n` +
             `📜 **ታሪክ:** [ ${formattedHist} ]\n` +
-            `🟢 **አሁንቁጥር: [ ${formattedCurrent} ]**`,
+            `🟢 **አሁን ቁጥር: [ ${formattedCurrent} ]**`,
             getBingoKeyboard(userGame.matrix)
         ).catch(() => {});
     } else {
@@ -1326,4 +1308,4 @@ bot.on('text', async (ctx) => {
 });
 
 bot.launch();
-console.log('🤖 Bot is running successfully with 20 ETB welcome bonus feature!');
+console.log('🤖 Bot is running successfully with real-time 6-second Bingo drawing feature!');
