@@ -777,10 +777,9 @@ function runBingoQueue(cost, gameId) {
                     let userGame = activeGames[pId];
                     if (userGame && userGame.gameId === activeGameSessionId) {
                         try {
-                            // 🌟 የተጠራው ቁጥር በከፍተኛ Heading 1 (<h1>) እና በጉልህ እንዲታይ ተደርጓል
                             let messageText = 
                                 `🎲 <b>ጨዋታ በሂደት ላይ... (ETB ${session.cost})</b>\n` +
-                                `💰 አጠቃላይ ፖል: <b>ETB ${session.totalPool}</b> \vert{} ሽልማት: <b>ETB ${session.winnerReward}</b>\n\n` +
+                                `💰 አጠቃላይ ፖል: <b>ETB ${session.totalPool}</b> | ሽልማት: <b>ETB ${session.winnerReward}</b>\n\n` +
                                 `🔴 <b><u>አሁን የተጠራው ቁጥር፦</u></b>\n\n` +
                                 `<h1><b>📢 [ ${formattedCurrent} ] 📢</b></h1>\n\n` +
                                 `📜 <b>የወጡ ቁጥሮች ታሪክ:</b>\n[ ${formattedHist} ]`;
@@ -791,7 +790,7 @@ function runBingoQueue(cost, gameId) {
                                 undefined,
                                 messageText,
                                 {
-                                    parse_mode: 'HTML', // HTML parse_mode ተጨምሯል
+                                    parse_mode: 'HTML',
                                     ...getBingoKeyboard(userGame.matrix)
                                 }
                             );
@@ -1116,7 +1115,7 @@ bot.hears('👥 የተጫዋቾች ዝርዝር (Player List)', async (ctx) => {
     if (users.length === 0) return ctx.reply('📭 እስካሁን የተመዘገበ ተጫዋች የለም።', adminKeyboard);
     ctx.reply(`👥 **የተጫዋቾች ዝርዝር:**`, adminKeyboard);
     for (let [index, u] of users.entries()) {
-        let playerInfo = `👤 **${index + 1}. ስም:** ${u.userName}\n🆔 **ID:** \`${u.userId}\`\n📱 **ስልክ:** ${u.phone \vert{}\vert{} 'N/A'}\n💰 **ባላንስ:** ETB ${u.balance}`;
+        let playerInfo = `👤 **${index + 1}. ስም:** ${u.userName}\n🆔 **ID:** \`${u.userId}\`\n📱 **ስልክ:** ${u.phone || 'N/A'}\n💰 **ባላንስ:** ETB ${u.balance}`;
         let removeButton = Markup.inlineKeyboard([[Markup.button.callback('❌ ከቦቱ አስወጣ', `ban_user_${u.userId}`)]]);
         await ctx.reply(playerInfo, { parse_mode: 'Markdown', ...removeButton });
     }
@@ -1241,7 +1240,6 @@ bot.action(/cell_(\d+)_(\d+)/, async (ctx) => {
         let formattedHist = session.drawnHistory.map(n => getFormattedBingoNumber(n)).join(', ');
         let formattedCurrent = getFormattedBingoNumber(session.drawnNumber);
 
-        // 🌟 ተጫዋቹ ሴል ሲነካም ቁጥሩ ትልቅ ሆኖ እንዳለ ይቆያል
         let messageText = 
             `🎲 <b>ጨዋታ በሂደት ላይ... (ETB ${session.cost})</b>\n` +
             `💰 አጠቃላይ ፖል: <b>ETB ${session.totalPool}</b> | ሽልማት: <b>ETB ${session.winnerReward}</b>\n\n` +
