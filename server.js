@@ -20,7 +20,7 @@ if (!MONGO_URI) {
 mongoose.connect(MONGO_URI)
 .then(() => {
     console.log('📦 Connected to MongoDB successfully!');
-    seedAdminAccounts(); // አድሚኖችን ዳታቤዝ ውስጥ ማስገባት
+    seedAdminAccounts();
 }).catch(err => {
     console.error('❌ MongoDB connection error:', err);
     process.exit(1);
@@ -32,7 +32,7 @@ const userSchema = new mongoose.Schema({
     userName: { type: String },
     phone: { type: String, default: null },
     balance: { type: Number, default: 0 },
-    assignedAdminId: { type: Number, default: null }, // 👈 ለተጫዋቹ የተመደበው አድሚን ID
+    assignedAdminId: { type: Number, default: null },
     hasReceivedBonus: { type: Boolean, default: false },
     totalGames: { type: Number, default: 0 },
     wins: { type: Number, default: 0 },
@@ -153,13 +153,12 @@ const initialAdminAccounts = [
     }
 ];
 
-// አድሚኖችን ዳታቤዝ ውስጥ የመመዝገቢያ Function
 async function seedAdminAccounts() {
     for (let acc of initialAdminAccounts) {
         await AdminAccount.findOneAndUpdate(
             { adminId: acc.adminId },
             { ...acc, isActive: true },
-            { upsert: true, new: true }
+            { upsert: true, returnDocument: 'after' }
         );
     }
     console.log('✅ የአድሚን አካውንቶች ዳታቤዝ ውስጥ በትክክል ተመዝግበዋል።');
@@ -173,7 +172,6 @@ function isAdmin(userId) {
     return userId === OWNER_ID || subAdmins.includes(userId);
 }
 
-// ተጫዋች ሲመዘገብ በራንደም አንዱን አድሚን መመደቢያ Function
 async function assignRandomAdminToUser(user) {
     if (user.assignedAdminId) return user;
 
@@ -186,7 +184,6 @@ async function assignRandomAdminToUser(user) {
     return user;
 }
 
-// የተመደበለትን አድሚን የክፍያ መረጃ የሚያመጣ Function
 async function getAssignedAdminPaymentInfo(assignedAdminId) {
     if (assignedAdminId) {
         const admin = await AdminAccount.findOne({ adminId: assignedAdminId, isActive: true });
@@ -224,11 +221,10 @@ async function getOrCreateUser(userId, userName = 'ተጫዋች') {
 // ---------------- AUTOMATED CRON JOBS ----------------
 cron.schedule('0 0 * * *', async () => {
     await User.updateMany({}, { dailyWins: 0 });
-    console.log('🔄 የዕለቱ የጨዋታ ገደብ ታድሷል (Daily Wins Reset)');
+    console.log('🔄 የዕለቱ የጨዋታ ገደብ ታድሷል');
 });
 
 cron.schedule('0 0 * * 0', async () => {
-    console.log('🏆 የሳምንቱ ቶርናመንት በማጠናቀቅ ላይ...');
     let winners = await User.find({ qualifiedDays: { $gt: 0 } }).sort({ weeklyWins: -1 }).limit(3);
 
     if (winners.length > 0) {
@@ -246,7 +242,6 @@ cron.schedule('0 0 * * 0', async () => {
     }
 
     await User.updateMany({}, { weeklyWins: 0, qualifiedDays: 0 });
-    console.log('✅ የሳምንቱ ቶርናመንት በሰላም ተጠናቆ ዳታው ታድሷል።');
 });
 
 app.get('/', (req, res) => {
@@ -432,11 +427,12 @@ const mainKeyboard = Markup.keyboard([
 const adminKeyboard = Markup.keyboard([
     ['📊 የአድሚን ባላንስ ማየት', '👥 የተጫዋቾች ዝርዝር (Player List)'],
     ['📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', '💬 የተጫዋቾች ኮሜንቶች'],
-    ['🥇 የዕለቱ ከፍተኛ አሸናፊዎች', '🎮 አድሚን መጫወቻ (Admin Play)'],
-    ['💵 አድሚን ዲፖዚት ማድረግ', '🔙 ወደ ዋናው ሜኑ ተመለስ']
+    ['🥇 የዕለቱ ከፍተኛ አሸናፊዎች', '🛡 የረዳት አድሚኖች ዝርዝር'],
+    ['💵 አድሚን ዲፖዚት ማድረግ', '🎮 አድሚን መጫወቻ (Admin Play)'],
+    ['🔙 ወደ ዋናው ሜኑ ተመለስ']
 ]).resize();
 
-// --- 4. ቦት ስታርት እና የአድሚን መመደቢያ ---
+// --- 4. ቦት ስታርት ---
 bot.start(async (ctx) => {
     const userId = ctx.from.id;
     const userName = ctx.from.first_name || 'ተጫዋች';
@@ -457,7 +453,6 @@ bot.start(async (ctx) => {
         await user.save();
     }
 
-    // ተጫዋቹን በራንደም ከአንዱ ረዳት አድሚን ጋር ማያያዝ
     user = await assignRandomAdminToUser(user);
 
     if (isAdmin(userId)) {
@@ -496,7 +491,7 @@ bot.command('addadminaccount', async (ctx) => {
     await AdminAccount.findOneAndUpdate(
         { adminId },
         { adminId, adminName, telebirr, cbeAccount, isActive: true },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
     );
 
     if (!subAdmins.includes(adminId)) {
@@ -779,7 +774,7 @@ function runBingoQueue(cost, gameId) {
                         try {
                             let messageText = 
                                 `🎲 <b>ጨዋታ በሂደት ላይ... (ETB ${session.cost})</b>\n` +
-                                `💰 አጠቃላይ ፖል: <b>ETB ${session.totalPool}</b> | ሽልማት: <b>ETB ${session.winnerReward}</b>\n\n` +
+                                `💰 አጠቃላይ ፖል: <b>ETB ${session.totalPool}</b> \vert{} ሽልማት: <b>ETB ${session.winnerReward}</b>\n\n` +
                                 `🔴 <b><u>አሁን የተጠራው ቁጥር፦</u></b>\n\n` +
                                 `<h1><b>📢 [ ${formattedCurrent} ] 📢</b></h1>\n\n` +
                                 `📜 <b>የወጡ ቁጥሮች ታሪክ:</b>\n[ ${formattedHist} ]`;
@@ -1109,16 +1104,111 @@ bot.hears('📊 የአድሚን ባላንስ ማየት', async (ctx) => {
     ctx.reply(`📊 **የአድሚን ባላንስ እና ስታቲስቲክስ**\n\n👥 አጠቃላይ ተጫዋቾች: ${users.length} ሰው\n💰 የተጫዋቾች አጠቃላይ ባላንስ: ETB ${totalCompanyBalance}`, adminKeyboard);
 });
 
+// 1. ተጫዋቾችን በገጽ (Pagination) ከፋፍሎ ከነ "Prev/Next" አዝራሮች የሚያሳይ Function
+async function sendPlayerList(ctx, page = 1) {
+    const limit = 5; 
+    const skip = (page - 1) * limit;
+
+    const totalUsers = await User.countDocuments();
+    const totalPages = Math.ceil(totalUsers / limit) || 1;
+    const users = await User.find().sort({ _id: -1 }).skip(skip).limit(limit);
+
+    if (users.length === 0) {
+        return ctx.reply('📭 እስካሁን የተመዘገበ ተጫዋች የለም።', adminKeyboard);
+    }
+
+    let messageText = `👥 **የተጫዋቾች ዝርዝር (ገጽ ${page} ከ ${totalPages})**\n` +
+                       `📌 አጠቃላይ ተጫዋቾች: **${totalUsers}**\n\n`;
+
+    users.forEach((u, index) => {
+        messageText += `**${skip + index + 1}.${u.userName}**\n` +
+                       `   • 🆔 ID: \`${u.userId}\`\n` +
+                       `   • 📱 ስልክ: ${u.phone || 'N/A'}\n` +
+                       `   • 💰 ባላንስ: ETB ${u.balance}\n\n`;
+    });
+
+    let navButtons = [];
+    if (page > 1) {
+        navButtons.push(Markup.button.callback('⬅️ Prev (ቀደመው)', `players_page_${page - 1}`));
+    }
+    if (page < totalPages) {
+        navButtons.push(Markup.button.callback('Next (ቀጣይ) ➡️', `players_page_${page + 1}`));
+    }
+
+    let inlineNav = navButtons.length > 0 ? [navButtons] : [];
+
+    if (ctx.callbackQuery) {
+        await ctx.editMessageText(messageText, { parse_mode: 'Markdown', ...Markup.inlineKeyboard(inlineNav) }).catch(() => {});
+    } else {
+        await ctx.reply(messageText, { parse_mode: 'Markdown', ...Markup.inlineKeyboard(inlineNav) });
+    }
+}
+
 bot.hears('👥 የተጫዋቾች ዝርዝር (Player List)', async (ctx) => {
     if (!isAdmin(ctx.from.id)) return;
-    let users = await User.find().sort({ _id: -1 }).limit(20);
-    if (users.length === 0) return ctx.reply('📭 እስካሁን የተመዘገበ ተጫዋች የለም።', adminKeyboard);
-    ctx.reply(`👥 **የተጫዋቾች ዝርዝር:**`, adminKeyboard);
-    for (let [index, u] of users.entries()) {
-        let playerInfo = `👤 **${index + 1}. ስም:** ${u.userName}\n🆔 **ID:** \`${u.userId}\`\n📱 **ስልክ:** ${u.phone || 'N/A'}\n💰 **ባላንስ:** ETB ${u.balance}`;
-        let removeButton = Markup.inlineKeyboard([[Markup.button.callback('❌ ከቦቱ አስወጣ', `ban_user_${u.userId}`)]]);
-        await ctx.reply(playerInfo, { parse_mode: 'Markdown', ...removeButton });
+    await sendPlayerList(ctx, 1);
+});
+
+bot.action(/players_page_(\d+)/, async (ctx) => {
+    if (!isAdmin(ctx.from.id)) return;
+    const page = parseInt(ctx.match[1]);
+    await ctx.answerCbQuery();
+    await sendPlayerList(ctx, page);
+});
+
+// 2. የረዳት አድሚኖችን ብዛት እና ዝርዝር በየገፁ ከነ Prev/Next አዝራሮች የሚያሳይ Function (ለሱፐር አድሚን ብቻ)
+async function sendAdminList(ctx, page = 1) {
+    const limit = 5; 
+    const skip = (page - 1) * limit;
+
+    const totalAdmins = await AdminAccount.countDocuments();
+    const totalPages = Math.ceil(totalAdmins / limit) || 1;
+    const adminAccounts = await AdminAccount.find().sort({ _id: 1 }).skip(skip).limit(limit);
+
+    if (adminAccounts.length === 0) {
+        return ctx.reply('📭 እስካሁን ዳታቤዝ ውስጥ የተመዘገበ አድሚን የለም።', adminKeyboard);
     }
+
+    let msg = `🛡 **የረዳት አድሚኖች ዝርዝር (ገጽ ${page} ከ ${totalPages})**\n` +
+              `📌 አጠቃላይ የአድሚኖች ብዛት: **${totalAdmins}**\n\n`;
+
+    adminAccounts.forEach((admin, idx) => {
+        let role = admin.adminId === OWNER_ID ? '👑 Owner (መስራች)' : '🛡 Sub-Admin (ረዳት)';
+        msg += `**${skip + idx + 1}. ${admin.adminName}** (${role})\n` +
+               `   • 🆔 Telegram ID: \`${admin.adminId}\`\n` +
+               `   • 📱 Telebirr: \`${admin.telebirr || 'የለም'}\`\n` +
+               `   • 🏦 CBE Account: \`${admin.cbeAccount || 'የለም'}\`\n\n`;
+    });
+
+    let navButtons = [];
+    if (page > 1) {
+        navButtons.push(Markup.button.callback('⬅️ Prev (ቀደመው)', `admins_page_${page - 1}`));
+    }
+    if (page < totalPages) {
+        navButtons.push(Markup.button.callback('Next (ቀጣይ) ➡️', `admins_page_${page + 1}`));
+    }
+
+    let inlineNav = navButtons.length > 0 ? [navButtons] : [];
+
+    if (ctx.callbackQuery) {
+        await ctx.editMessageText(msg, { parse_mode: 'Markdown', ...Markup.inlineKeyboard(inlineNav) }).catch(() => {});
+    } else {
+        await ctx.reply(msg, { parse_mode: 'Markdown', ...Markup.inlineKeyboard(inlineNav) });
+    }
+}
+
+bot.hears('🛡 የረዳት አድሚኖች ዝርዝር', async (ctx) => {
+    if (!isOwner(ctx.from.id)) {
+        return ctx.reply('❌ ይህን መረጃ ማየት የሚችለው የመስራች አድሚን (Super Admin) ብቻ ነው!');
+    }
+    await sendAdminList(ctx, 1);
+});
+
+bot.action(/admins_page_(\d+)/, async (ctx) => {
+    if (!isOwner(ctx.from.id)) return;
+    const page = parseInt(ctx.match[1]);
+    await ctx.answerCbQuery();
+    await sendAdminList(ctx, page);
 });
 
 bot.hears('🥇 የዕለቱ ከፍተኛ አሸናፊዎች', async (ctx) => {
@@ -1504,4 +1594,4 @@ bot.on('text', async (ctx) => {
 });
 
 bot.launch();
-console.log('🤖 Bot is running successfully with assigned admin accounts!');
+console.log('🤖 Bot is running successfully!');
