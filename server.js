@@ -33,6 +33,7 @@ const userSchema = new mongoose.Schema({
     phone: { type: String, default: null },
     balance: { type: Number, default: 0 },
     assignedAdminId: { type: Number, default: null },
+    referredBy: { type: Number, default: null }, // ሊንኩን የላከለት ሰው ID
     hasReceivedBonus: { type: Boolean, default: false },
     totalGames: { type: Number, default: 0 },
     wins: { type: Number, default: 0 },
@@ -172,9 +173,31 @@ function isAdmin(userId) {
     return userId === OWNER_ID || subAdmins.includes(userId);
 }
 
-async function assignRandomAdminToUser(user) {
+// ---------------- REFERRAL LOGIC IN ASSIGNMENT ----------------
+async function assignAdminToUser(user, referrerId = null) {
     if (user.assignedAdminId) return user;
 
+    // 1. ተጫዋቹ በሪፌራል ሊንክ ከመጣ
+    if (referrerId && referrerId !== user.userId) {
+        user.referredBy = referrerId;
+        
+        // ጋባዡ አድሚን ከሆነ በቀጥታ ለዚያ አድሚን ይመደባል
+        if (isAdmin(referrerId)) {
+            user.assignedAdminId = referrerId;
+            await user.save();
+            return user;
+        }
+
+        // ጋባዡ ሌላ ተጫዋች ከሆነ የዚያ ተጫዋች አድሚን ማን እንደሆነ ፈልጎ ይመድባል
+        const referrerUser = await User.findOne({ userId: referrerId });
+        if (referrerUser && referrerUser.assignedAdminId) {
+            user.assignedAdminId = referrerUser.assignedAdminId;
+            await user.save();
+            return user;
+        }
+    }
+
+    // 2. ያለ ሪፌራል ከመጣ ወይም የጋባዡ አድሚን ካልተገኘ በዘፈቀደ (Random) ይመደባል
     const activeAdmins = await AdminAccount.find({ isActive: true });
     if (activeAdmins.length > 0) {
         const randomIndex = Math.floor(Math.random() * activeAdmins.length);
@@ -418,7 +441,7 @@ function checkWinCondition(matrix) {
 
 const mainKeyboard = Markup.keyboard([
     ['🎮 ፕለይ (Play)'],
-    ['🏆 የሳምንቱ አሸናፊዎች (Leaderboard)'],
+    ['🏆 የሳምንቱ አሸናፊዎች (Leaderboard)', '🔗 የኔ ሪፌራል ሊንክ (Referral)'],
     ['💰 ዲፖዚት (Deposit)', '💳 ዊዝድሮ (Withdraw)'],
     ['👤 ፕሮፋይል (Profile)', '💬 ኮሜንት (Comment)'],
     ['📖 መመሪያ (Instructions)']
@@ -432,10 +455,17 @@ const adminKeyboard = Markup.keyboard([
     ['🔙 ወደ ዋናው ሜኑ ተመለስ']
 ]).resize();
 
-// --- 4. ቦት ስታርት ---
+// --- 4. ቦት ስታርት (REFERRAL SUPPORT INCLUDED) ---
 bot.start(async (ctx) => {
     const userId = ctx.from.id;
     const userName = ctx.from.first_name || 'ተጫዋች';
+
+    // ከ/start በኋላ የተላከውን የሪፌራል መረጃ ማንበብ (ምሳሌ፦ /start ref_123456789)
+    let startPayload = ctx.message.text.split(' ')[1] || '';
+    let referrerId = null;
+    if (startPayload.startsWith('ref_')) {
+        referrerId = parseInt(startPayload.replace('ref_', ''));
+    }
     
     let user = await User.findOne({ userId });
     
@@ -453,7 +483,8 @@ bot.start(async (ctx) => {
         await user.save();
     }
 
-    user = await assignRandomAdminToUser(user);
+    // አድሚን የመመደብ ሂደቱን ከሪፌራል መረጃ ጋር ማስሄድ
+    user = await assignAdminToUser(user, referrerId);
 
     if (isAdmin(userId)) {
         let roleTitle = isOwner(userId) ? '👑 የመስራች አድሚን (Super Admin)' : '🛡 ረዳት አድሚን (Sub-Admin)';
@@ -470,6 +501,19 @@ bot.start(async (ctx) => {
 
     let bonusNotice = `\n\n🎁 (የእንኳን ደህና መጡ 20 ብር ቦነስ ተሰጥቶዎታል!)`;
     await ctx.reply(`🎲 **እፉዬ ጨዋታዎች ማዕከል** - እንኳን ደህና መጡ እንደገና ${userName}!${bonusNotice}\n\nእባክዎ የሚፈልጉትን አማራጭ ከታች ካለው ሜኑ ይምረጡ።`, mainKeyboard);
+});
+
+// የሪፌራል ሊንክ ማመንጫ ቁልፍ
+bot.hears('🔗 የኔ ሪፌራል ሊንክ (Referral)', async (ctx) => {
+    const userId = ctx.from.id;
+    const botUsername = ctx.botInfo.username;
+    const refLink = `https://t.me/${botUsername}?start=ref_${userId}`;
+
+    let msg = `🔗 **የእርስዎ ግላዊ የሪፌራል ሊንክ (Referral Link):**\n\n` +
+              `\`${refLink}\`\n\n` +
+              `📌 **ይህንን ሊንክ ለጓደኞችዎ ወይም ለተጫዋቾች በማጋራት ሰዎችን መጋበዝ ይችላሉ!**`;
+
+    ctx.reply(msg, { parse_mode: 'Markdown' });
 });
 
 // --- የመስራች አድሚን የቁጥጥር ኮማንዶች ---
@@ -1045,7 +1089,7 @@ bot.hears('💰 ዲፖዚት (Deposit)', async (ctx) => {
         );
     }
 
-    user = await assignRandomAdminToUser(user);
+    user = await assignAdminToUser(user);
     const paymentInfo = await getAssignedAdminPaymentInfo(user.assignedAdminId);
 
     userSteps[userId] = { action: 'deposit_amount' };
@@ -1156,7 +1200,7 @@ bot.action(/players_page_(\d+)/, async (ctx) => {
     await sendPlayerList(ctx, page);
 });
 
-// 2. የረዳት አድሚኖችን ብዛት እና ዝርዝር በየገፁ ከነ Prev/Next አዝራሮች የሚያሳይ Function (ለሱፐር አድሚን ብቻ)
+// 2. የረዳት አድሚኖችን ብዛት፣ ባላንሳቸውን እና በስራቸው ያሉ ተጫዋቾች ብዛት የሚያሳይ Function
 async function sendAdminList(ctx, page = 1) {
     const limit = 5; 
     const skip = (page - 1) * limit;
@@ -1169,13 +1213,28 @@ async function sendAdminList(ctx, page = 1) {
         return ctx.reply('📭 እስካሁን ዳታቤዝ ውስጥ የተመዘገበ አድሚን የለም።', adminKeyboard);
     }
 
+    const adminDetails = await Promise.all(
+        adminAccounts.map(async (admin) => {
+            const adminUserDoc = await User.findOne({ userId: admin.adminId });
+            const playersCount = await User.countDocuments({ assignedAdminId: admin.adminId });
+
+            return {
+                ...admin.toObject(),
+                balance: adminUserDoc ? adminUserDoc.balance : 0,
+                playersCount: playersCount
+            };
+        })
+    );
+
     let msg = `🛡 **የረዳት አድሚኖች ዝርዝር (ገጽ ${page} ከ ${totalPages})**\n` +
               `📌 አጠቃላይ የአድሚኖች ብዛት: **${totalAdmins}**\n\n`;
 
-    adminAccounts.forEach((admin, idx) => {
+    adminDetails.forEach((admin, idx) => {
         let role = admin.adminId === OWNER_ID ? '👑 Owner (መስራች)' : '🛡 Sub-Admin (ረዳት)';
         msg += `**${skip + idx + 1}. ${admin.adminName}** (${role})\n` +
                `   • 🆔 Telegram ID: \`${admin.adminId}\`\n` +
+               `   • 💰 ባላንስ: **ETB ${admin.balance}**\n` +
+               `   • 👥 በስሩ ያሉ ተጫዋቾች: **${admin.playersCount}** ተጫዋቾች\n` +
                `   • 📱 Telebirr: \`${admin.telebirr || 'የለም'}\`\n` +
                `   • 🏦 CBE Account: \`${admin.cbeAccount || 'የለም'}\`\n\n`;
     });
@@ -1244,8 +1303,18 @@ bot.hears('🥇 የዕለቱ ከፍተኛ አሸናፊዎች', async (ctx) => {
 
 bot.hears('📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', async (ctx) => {
     if (!isAdmin(ctx.from.id)) return;
-    let reqs = await RequestModel.find();
+    
+    // አድሚኑ የመስራች (Owner) ካልሆነ የሚመለከተው የእሱን ተጫዋቾች ጥያቄ ብቻ ነው
+    let filter = {};
+    if (!isOwner(ctx.from.id)) {
+        let assignedUsers = await User.find({ assignedAdminId: ctx.from.id }).select('userId');
+        let userIds = assignedUsers.map(u => u.userId);
+        filter = { userId: { $in: userIds } };
+    }
+
+    let reqs = await RequestModel.find(filter);
     if (reqs.length === 0) return ctx.reply('📭 ምንም የሚጠብቅ ጥያቄ የለም።', adminKeyboard);
+    
     for (let r of reqs) {
         let msg = `📌 **አይነት:** ${r.type.toUpperCase()}\n👤 **ስም:** ${r.userName} (ID: \`${r.userId}\`)\n💰 **መጠን:** ETB ${r.amount}\n📱 **አካውንት:** \`${r.details}\``;
         let keyboard = Markup.inlineKeyboard([
@@ -1261,7 +1330,15 @@ bot.hears('📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', async (ctx) => {
 
 bot.hears('💬 የተጫዋቾች ኮሜንቶች', async (ctx) => {
     if (!isAdmin(ctx.from.id)) return;
-    let comments = await CommentModel.find().sort({ date: -1 }).limit(15);
+    
+    let filter = {};
+    if (!isOwner(ctx.from.id)) {
+        let assignedUsers = await User.find({ assignedAdminId: ctx.from.id }).select('userId');
+        let userIds = assignedUsers.map(u => u.userId);
+        filter = { userId: { $in: userIds } };
+    }
+
+    let comments = await CommentModel.find(filter).sort({ date: -1 }).limit(15);
     if (comments.length === 0) return ctx.reply('📭 ምንም አስተያየት የለም።', adminKeyboard);
     
     for (let c of comments) {
@@ -1332,7 +1409,7 @@ bot.action(/cell_(\d+)_(\d+)/, async (ctx) => {
 
         let messageText = 
             `🎲 <b>ጨዋታ በሂደት ላይ... (ETB ${session.cost})</b>\n` +
-            `💰 አጠቃላይ ፖል: <b>ETB ${session.totalPool}</b> | ሽልማት: <b>ETB ${session.winnerReward}</b>\n\n` +
+            `💰 አጠቃላይ ፖል: <b>ETB ${session.totalPool}</b> \vert{} ሽልማት: <b>ETB ${session.winnerReward}</b>\n\n` +
             `🔴 <b><u>አሁን የተጠራው ቁጥር፦</u></b>\n\n` +
             `<h1><b>📢 [ ${formattedCurrent} ] 📢</b></h1>\n\n` +
             `📜 <b>የወጡ ቁጥሮች ታሪክ:</b>\n[ ${formattedHist} ]`;
@@ -1420,7 +1497,7 @@ bot.action(/approve_req_(.+)/, async (ctx) => {
             OWNER_ID, 
             `🔔 **የአድሚን እንቅስቃሴ ማሳወቂያ!**\n\n` +
             `👤 **አድሚን:** ${ctx.from.first_name} (ID: \`${ctx.from.id}\`)\n` +
-            `✅ **የጸደቀው:** የ ${req.amount} ETB ${req.type.toUpperCase()}\n` +
+            `✅ **የጸደቀው:** የ ${req.amount} ETB${req.type.toUpperCase()}\n` +
             `🎯 **ለተጫዋች:** ${req.userName} (ID: \`${req.userId}\`)`,
             { parse_mode: 'Markdown' }
         ).catch(()=>{});
@@ -1490,9 +1567,14 @@ bot.on('photo', async (ctx) => {
         await newComment.save();
 
         ctx.reply(`✅ ፎቶዎ ለአድሚን ተልኳል!`, mainKeyboard);
+
+        // ለተመደበለት አድሚን ብቻ ወይም ለነባሪው Owner መልእክት መላክ
+        let userDoc = await User.findOne({ userId });
+        let adminToNotify = userDoc?.assignedAdminId || OWNER_ID;
+
         let adminMsg = `📌 **አዲስ የኮሜንት ፎቶ መጣ!**\n\n👤 **ከ:** ${userName} (ID: \`${userId}\`)`;
         let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ', `reply_comment_${newComment._id}`)]]);
-        return bot.telegram.sendPhoto(OWNER_ID, photoId, { caption: adminMsg, parse_mode: 'Markdown', ...replyBtn }).catch(()=>{});
+        return bot.telegram.sendPhoto(adminToNotify, photoId, { caption: adminMsg, parse_mode: 'Markdown', ...replyBtn }).catch(()=>{});
     }
 
     if (userSteps[userId] && userSteps[userId].action === 'deposit_screenshot') {
@@ -1515,12 +1597,16 @@ bot.on('photo', async (ctx) => {
 
         ctx.reply(`⏳ የዲፖዚት ጥያቄዎ ደርሷል! እባክዎ ይጠብቁ።`);
 
+        // ጥያቄውን ለተመደበው አድሚን ብቻ ማሳወቅ
+        let userDoc = await User.findOne({ userId });
+        let adminToNotify = userDoc?.assignedAdminId || OWNER_ID;
+
         let adminMsg = `📥 **አዲስ የዲፖዚት ጥያቄ!**\n\n👤 **ስም:** ${userName} (ID: \`${userId}\`)\n💰 **መጠን:** ETB ${amount}`;
         let adminKeyboard = Markup.inlineKeyboard([
             [Markup.button.callback('✅ አጽድቅ', `approve_req_${newReq._id}`), Markup.button.callback('❌ ውድቅ አድርግ', `reject_req_${newReq._id}`)]
         ]);
 
-        bot.telegram.sendPhoto(OWNER_ID, photoId, { caption: adminMsg, parse_mode: 'Markdown', ...adminKeyboard }).catch(()=>{});
+        bot.telegram.sendPhoto(adminToNotify, photoId, { caption: adminMsg, parse_mode: 'Markdown', ...adminKeyboard }).catch(()=>{});
     }
 });
 
@@ -1575,7 +1661,17 @@ bot.on('text', async (ctx) => {
             await user.save();
             let newReq = new RequestModel({ userId, userName: user.userName, type: 'withdraw', amount, details: user.phone });
             await newReq.save();
+
             ctx.reply(`⏳ የዊዝድሮ ጥያቄዎ ለአድሚን ተልኳል!`);
+
+            // የዊዝድሮ ጥያቄውን ለተመደበለት አድሚን መላክ
+            let adminToNotify = user.assignedAdminId || OWNER_ID;
+            let adminMsg = `📥 **አዲስ የዊዝድሮ ጥያቄ!**\n\n👤 **ስም:** ${user.userName} (ID: \`${userId}\`)\n💰 **መጠን:** ETB ${amount}\n📱 **ስልክ:** \`${user.phone}\``;
+            let adminKeyboard = Markup.inlineKeyboard([
+                [Markup.button.callback('✅ አጽድቅ', `approve_req_${newReq._id}`), Markup.button.callback('❌ ውድቅ አድርግ', `reject_req_${newReq._id}`)]
+            ]);
+
+            bot.telegram.sendMessage(adminToNotify, adminMsg, { parse_mode: 'Markdown', ...adminKeyboard }).catch(()=>{});
             return;
         }
 
@@ -1586,9 +1682,12 @@ bot.on('text', async (ctx) => {
             
             ctx.reply(`✅ አስተያየትዎ ለአድሚን ተልኳል!`, mainKeyboard);
             
+            let userDoc = await User.findOne({ userId });
+            let adminToNotify = userDoc?.assignedAdminId || OWNER_ID;
+
             let adminMsg = `📌 **አዲስ ኮሜንት!**\n\n👤 **ከ:** ${ctx.from.first_name} (ID: \`${userId}\`)\n💬 "${text}"`;
             let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ', `reply_comment_${newComment._id}`)]]);
-            return bot.telegram.sendMessage(OWNER_ID, adminMsg, { parse_mode: 'Markdown', ...replyBtn }).catch(()=>{});
+            return bot.telegram.sendMessage(adminToNotify, adminMsg, { parse_mode: 'Markdown', ...replyBtn }).catch(()=>{});
         }
     }
 });
