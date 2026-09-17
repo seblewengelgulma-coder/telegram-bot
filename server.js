@@ -13,13 +13,14 @@ app.use(express.json());
 const MONGO_URI = process.env.MONGO_URI;
 
 if (!MONGO_URI) {
-    console.error('❌ MONGODB_URI is not defined in environment variables!');
+    console.error('❌ MONGO_URI is not defined in environment variables!');
     process.exit(1);
 }
 
 mongoose.connect(MONGO_URI)
 .then(() => {
     console.log('📦 Connected to MongoDB successfully!');
+    seedAdminAccounts(); // አድሚኖችን ዳታቤዝ ውስጥ ማስገባት
 }).catch(err => {
     console.error('❌ MongoDB connection error:', err);
     process.exit(1);
@@ -31,6 +32,7 @@ const userSchema = new mongoose.Schema({
     userName: { type: String },
     phone: { type: String, default: null },
     balance: { type: Number, default: 0 },
+    assignedAdminId: { type: Number, default: null }, // 👈 ለተጫዋቹ የተመደበው አድሚን ID
     hasReceivedBonus: { type: Boolean, default: false },
     totalGames: { type: Number, default: 0 },
     wins: { type: Number, default: 0 },
@@ -41,6 +43,15 @@ const userSchema = new mongoose.Schema({
     level: { type: Number, default: 1 }
 });
 const User = mongoose.model('User', userSchema);
+
+const adminAccountSchema = new mongoose.Schema({
+    adminId: { type: Number, required: true, unique: true },
+    adminName: { type: String, required: true },
+    telebirr: { type: String, required: true },
+    cbeAccount: { type: String, required: true },
+    isActive: { type: Boolean, default: true }
+});
+const AdminAccount = mongoose.model('AdminAccount', adminAccountSchema);
 
 const requestSchema = new mongoose.Schema({
     userId: { type: Number, required: true },
@@ -83,9 +94,76 @@ if (!TOKEN) {
 
 const bot = new Telegraf(TOKEN);
 
-// --- የአድሚን ስልጣን ደረጃዎች ---
-const OWNER_ID = 380035906; // የመስራች አድሚን (Super Admin) ID[cite: 2]
-let subAdmins = [356872111,897196934]; // የረዳት አድሚኖች Telegram ID ዝርዝር
+// የመስራች አድሚን (Super Admin) ID
+const OWNER_ID = 380035906;
+
+// የረዳት አድሚኖች Telegram ID ዝርዝር
+let subAdmins = [
+    897196934,
+    356872111,
+    1259126904,
+    7192701371,
+    413158935,
+    1694041775
+];
+
+// የአድሚኖች አካውንትና ስልክ መረጃ
+const initialAdminAccounts = [
+    {
+        adminId: 380035906,
+        adminName: 'መስራች አድሚን (Owner)',
+        telebirr: '0929441620',
+        cbeAccount: '10005741880'
+    },
+    {
+        adminId: 897196934,
+        adminName: 'እዩኤል',
+        telebirr: '0923272131',
+        cbeAccount: ''
+    },
+    {
+        adminId: 356872111,
+        adminName: 'ያሬድ',
+        telebirr: '0923941648',
+        cbeAccount: ''
+    },
+    {
+        adminId: 1259126904,
+        adminName: 'ዮሃንሰ',
+        telebirr: '0913774232',
+        cbeAccount: ''
+    },
+    {
+        adminId: 7192701371,
+        adminName: 'እንዳለ',
+        telebirr: '0991220615',
+        cbeAccount: ''
+    },
+    {
+        adminId: 413158935,
+        adminName: 'ቴዲ',
+        telebirr: '0929441620',
+        cbeAccount: ''
+    },
+    {
+        adminId: 1694041775,
+        adminName: 'ሰብለ',
+        telebirr: '0929441620',
+        cbeAccount: ''
+    }
+];
+
+// አድሚኖችን ዳታቤዝ ውስጥ የመመዝገቢያ Function
+async function seedAdminAccounts() {
+    for (let acc of initialAdminAccounts) {
+        await AdminAccount.findOneAndUpdate(
+            { adminId: acc.adminId },
+            { ...acc, isActive: true },
+            { upsert: true, new: true }
+        );
+    }
+    console.log('✅ የአድሚን አካውንቶች ዳታቤዝ ውስጥ በትክክል ተመዝግበዋል።');
+}
 
 function isOwner(userId) {
     return userId === OWNER_ID;
@@ -95,12 +173,37 @@ function isAdmin(userId) {
     return userId === OWNER_ID || subAdmins.includes(userId);
 }
 
-const DAILY_WIN_GOAL = 3;
+// ተጫዋች ሲመዘገብ በራንደም አንዱን አድሚን መመደቢያ Function
+async function assignRandomAdminToUser(user) {
+    if (user.assignedAdminId) return user;
 
-const ADMIN_PAYMENT_INFO = `🏦 **የአድሚን የክፍያ አካውንቶች (ለዲፖዚት)**\n\n` +
-    `1. **ቴሌብር (telebirr):** 0929441620 (ቴዎድሮስ / እፉዬ)\n` +
-    `2. **ቴሌብር (telebirr):** 0923272131 (እዩኤል)\n` +
-    `3. **ቴሌብር (Telebirr):** 0923941648 (ያሬድ)\n\n`;
+    const activeAdmins = await AdminAccount.find({ isActive: true });
+    if (activeAdmins.length > 0) {
+        const randomIndex = Math.floor(Math.random() * activeAdmins.length);
+        user.assignedAdminId = activeAdmins[randomIndex].adminId;
+        await user.save();
+    }
+    return user;
+}
+
+// የተመደበለትን አድሚን የክፍያ መረጃ የሚያመጣ Function
+async function getAssignedAdminPaymentInfo(assignedAdminId) {
+    if (assignedAdminId) {
+        const admin = await AdminAccount.findOne({ adminId: assignedAdminId, isActive: true });
+        if (admin) {
+            return `🏦 **የአድሚን የክፍያ አካውንት (ለዲፖዚት)**\n\n` +
+                   `👤 **አድሚን:** ${admin.adminName}\n` +
+                   `1. **ንግድ ባንክ (CBE):** \`${admin.cbeAccount}\`\n` +
+                   `2. **ቴሌብር (Telebirr):** \`${admin.telebirr}\`\n\n`;
+        }
+    }
+
+    return `🏦 **የአድሚን የክፍያ አካውንት (ለዲፖዚት)**\n\n` +
+           `1. **ንግድ ባንክ (CBE):** 10005741880 (ቴዎድሮስ / እፉዬ)\n` +
+           `2. **ቴሌብር (Telebirr):** 0929441620 (ቴዎድሮስ)\n\n`;
+}
+
+const DAILY_WIN_GOAL = 3;
 
 let userSteps = {}; 
 let activeGames = {}; 
@@ -333,7 +436,7 @@ const adminKeyboard = Markup.keyboard([
     ['💵 አድሚን ዲፖዚት ማድረግ', '🔙 ወደ ዋናው ሜኑ ተመለስ']
 ]).resize();
 
-// --- 4. ቦት ስታርት እና የ 20 ብር ቦነስ አሰራር ---
+// --- 4. ቦት ስታርት እና የአድሚን መመደቢያ ---
 bot.start(async (ctx) => {
     const userId = ctx.from.id;
     const userName = ctx.from.first_name || 'ተጫዋች';
@@ -354,6 +457,9 @@ bot.start(async (ctx) => {
         await user.save();
     }
 
+    // ተጫዋቹን በራንደም ከአንዱ ረዳት አድሚን ጋር ማያያዝ
+    user = await assignRandomAdminToUser(user);
+
     if (isAdmin(userId)) {
         let roleTitle = isOwner(userId) ? '👑 የመስራች አድሚን (Super Admin)' : '🛡 ረዳት አድሚን (Sub-Admin)';
         return ctx.reply(`👋 **ሰላም ${userName}!**\nወደ ${roleTitle} ፓነል በደህና መጡ።`, adminKeyboard);
@@ -372,6 +478,34 @@ bot.start(async (ctx) => {
 });
 
 // --- የመስራች አድሚን የቁጥጥር ኮማንዶች ---
+bot.command('addadminaccount', async (ctx) => {
+    if (!isOwner(ctx.from.id)) {
+        return ctx.reply('❌ ይህንን ለማድረግ የመስራች (Super Admin) ስልጣን ያስፈልግዎታል!');
+    }
+
+    const args = ctx.message.text.split(' ').slice(1);
+    if (args.length < 4) {
+        return ctx.reply('⚠️ እባክዎ መረጃውን በትክክል ያስገቡ! \nምሳሌ፦ `/addadminaccount 987654321 አበበ 0911223344 1000123456789`', { parse_mode: 'Markdown' });
+    }
+
+    const adminId = parseInt(args[0]);
+    const adminName = args[1];
+    const telebirr = args[2];
+    const cbeAccount = args[3];
+
+    await AdminAccount.findOneAndUpdate(
+        { adminId },
+        { adminId, adminName, telebirr, cbeAccount, isActive: true },
+        { upsert: true, new: true }
+    );
+
+    if (!subAdmins.includes(adminId)) {
+        subAdmins.push(adminId);
+    }
+
+    ctx.reply(`✅ የረዳት አድሚን **${adminName}** (ID: \`${adminId}\`) የክፍያ መረጃ በተሳካ ሁኔታ ተመዝግቧል!`, { parse_mode: 'Markdown' });
+});
+
 bot.command('addadmin', (ctx) => {
     if (!isOwner(ctx.from.id)) {
         return ctx.reply('❌ ይህንን ለማድረግ የመስራች (Super Admin) ስልጣን ያስፈልግዎታል!');
@@ -434,7 +568,7 @@ bot.hears('🏆 የሳምንቱ አሸናፊዎች (Leaderboard)', async (ctx) =
     } else {
         topPlayers.forEach((player, index) => {
             let badge = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🎖';
-            leaderMsg += `${badge} **${index + 1}. ${player.userName}** — ${player.weeklyWins} ነጥብ (${player.qualifiedDays} ቀን ብቁ ሆኗል)\n`;
+            leaderMsg += `${badge} **${index + 1}.${player.userName}** — ${player.weeklyWins} ነጥብ (${player.qualifiedDays} ቀን ብቁ ሆኗል)\n`;
         });
     }
 
@@ -643,15 +777,23 @@ function runBingoQueue(cost, gameId) {
                     let userGame = activeGames[pId];
                     if (userGame && userGame.gameId === activeGameSessionId) {
                         try {
+                            // 🌟 የተጠራው ቁጥር በከፍተኛ Heading 1 (<h1>) እና በጉልህ እንዲታይ ተደርጓል
+                            let messageText = 
+                                `🎲 <b>ጨዋታ በሂደት ላይ... (ETB ${session.cost})</b>\n` +
+                                `💰 አጠቃላይ ፖል: <b>ETB ${session.totalPool}</b> \vert{} ሽልማት: <b>ETB ${session.winnerReward}</b>\n\n` +
+                                `🔴 <b><u>አሁን የተጠራው ቁጥር፦</u></b>\n\n` +
+                                `<h1><b>📢 [ ${formattedCurrent} ] 📢</b></h1>\n\n` +
+                                `📜 <b>የወጡ ቁጥሮች ታሪክ:</b>\n[ ${formattedHist} ]`;
+
                             await bot.telegram.editMessageText(
                                 pId,
                                 userGame.messageId,
                                 undefined,
-                                `🎲 **ጨዋታ በሂደት ላይ... (ETB ${session.cost})**\n` +
-                                `💰 አጠቃላይ ፖል: **ETB ${session.totalPool}** | አሸናፊ ሽልማት: **ETB ${session.winnerReward}**\n` +
-                                `📜 **ታሪክ:** [ ${formattedHist} ]\n` +
-                                `🟢 **አሁን ቁጥር: [ ${formattedCurrent} ]**`,
-                                getBingoKeyboard(userGame.matrix)
+                                messageText,
+                                {
+                                    parse_mode: 'HTML', // HTML parse_mode ተጨምሯል
+                                    ...getBingoKeyboard(userGame.matrix)
+                                }
                             );
                         } catch (e) {}
                     }
@@ -897,6 +1039,7 @@ bot.action('back_to_main_menu', (ctx) => {
     ]));
 });
 
+// --- 5. የተመደበ አድሚን መረጃን የሚያሳይ ዲፖዚት ---
 bot.hears('💰 ዲፖዚት (Deposit)', async (ctx) => {
     const userId = ctx.from.id;
     let user = await getOrCreateUser(userId);
@@ -908,8 +1051,11 @@ bot.hears('💰 ዲፖዚት (Deposit)', async (ctx) => {
         );
     }
 
+    user = await assignRandomAdminToUser(user);
+    const paymentInfo = await getAssignedAdminPaymentInfo(user.assignedAdminId);
+
     userSteps[userId] = { action: 'deposit_amount' };
-    ctx.reply(`${ADMIN_PAYMENT_INFO}\n💰 እባክዎ **ሊያስገቡት የሚፈልጉትን የብር መጠን** ቁጥር ብቻ ይጻፉ:`);
+    ctx.reply(`${paymentInfo}💰 እባክዎ **ሊያስገቡት የሚፈልጉትን የብር መጠን** ቁጥር ብቻ ይጻፉ:`, { parse_mode: 'Markdown' });
 });
 
 bot.hears('💳 ዊዝድሮ (Withdraw)', async (ctx) => {
@@ -970,7 +1116,7 @@ bot.hears('👥 የተጫዋቾች ዝርዝር (Player List)', async (ctx) => {
     if (users.length === 0) return ctx.reply('📭 እስካሁን የተመዘገበ ተጫዋች የለም።', adminKeyboard);
     ctx.reply(`👥 **የተጫዋቾች ዝርዝር:**`, adminKeyboard);
     for (let [index, u] of users.entries()) {
-        let playerInfo = `👤 **${index + 1}. ስም:** ${u.userName}\n🆔 **ID:** \`${u.userId}\`\n📱 **ስልክ:** ${u.phone || 'N/A'}\n💰 **ባላንስ:** ETB ${u.balance}`;
+        let playerInfo = `👤 **${index + 1}. ስም:** ${u.userName}\n🆔 **ID:** \`${u.userId}\`\n📱 **ስልክ:** ${u.phone \vert{}\vert{} 'N/A'}\n💰 **ባላንስ:** ETB ${u.balance}`;
         let removeButton = Markup.inlineKeyboard([[Markup.button.callback('❌ ከቦቱ አስወጣ', `ban_user_${u.userId}`)]]);
         await ctx.reply(playerInfo, { parse_mode: 'Markdown', ...removeButton });
     }
@@ -997,10 +1143,10 @@ bot.hears('🥇 የዕለቱ ከፍተኛ አሸናፊዎች', async (ctx) => {
             ? '✅ (ለሳምንቱ አልፏል)' 
             : `⏳ (ገና ${DAILY_WIN_GOAL - player.dailyWins} ድል ይቀረዋል)`;
 
-        reportMsg += `${medal} **${index + 1}. ${player.userName}**\n` +
+        reportMsg += `${medal} **${index + 1}.${player.userName}**\n` +
                      `   • ID: \`${player.userId}\`\n` +
                      `   • 📱 ስልክ: ${player.phone || 'N/A'}\n` +
-                     `   • 🎯 የዛሬ ድል: **${player.dailyWins}** ${qualificationStatus}\n` +
+                     `   • 🎯 የዛሬ ድል: **${player.dailyWins}**${qualificationStatus}\n` +
                      `   • 🏆 የሳምንቱ ነጥብ: ${player.weeklyWins}\n\n`;
     });
 
@@ -1095,12 +1241,20 @@ bot.action(/cell_(\d+)_(\d+)/, async (ctx) => {
         let formattedHist = session.drawnHistory.map(n => getFormattedBingoNumber(n)).join(', ');
         let formattedCurrent = getFormattedBingoNumber(session.drawnNumber);
 
+        // 🌟 ተጫዋቹ ሴል ሲነካም ቁጥሩ ትልቅ ሆኖ እንዳለ ይቆያል
+        let messageText = 
+            `🎲 <b>ጨዋታ በሂደት ላይ... (ETB ${session.cost})</b>\n` +
+            `💰 አጠቃላይ ፖል: <b>ETB ${session.totalPool}</b> | ሽልማት: <b>ETB ${session.winnerReward}</b>\n\n` +
+            `🔴 <b><u>አሁን የተጠራው ቁጥር፦</u></b>\n\n` +
+            `<h1><b>📢 [ ${formattedCurrent} ] 📢</b></h1>\n\n` +
+            `📜 <b>የወጡ ቁጥሮች ታሪክ:</b>\n[ ${formattedHist} ]`;
+
         ctx.editMessageText(
-            `🎲 **ጨዋታ በሂደት ላይ... (ETB ${session.cost})**\n` +
-            `💰 አጠቃላይ ፖል: **ETB ${session.totalPool}** | ሽልማት: **ETB ${session.winnerReward}**\n` +
-            `📜 **ታሪክ:** [ ${formattedHist} ]\n` +
-            `🟢 **አሁን ቁጥር: [ ${formattedCurrent} ]**`,
-            getBingoKeyboard(userGame.matrix)
+            messageText,
+            {
+                parse_mode: 'HTML',
+                ...getBingoKeyboard(userGame.matrix)
+            }
         ).catch(() => {});
     } else {
         let dispNum = getFormattedBingoNumber(cell.rawNum);
@@ -1173,7 +1327,6 @@ bot.action(/approve_req_(.+)/, async (ctx) => {
         bot.telegram.sendMessage(req.userId, `🎉 የ ${req.amount} ETB የዲፖዚት ጥያቄዎ ጸድቋል! 💰`).catch(()=>{});
     }
 
-    // ረዳት አድሚን ሲያጸድቅ ለመስራቹ የሚላክ ማሳወቂያ
     if (!isOwner(ctx.from.id)) {
         bot.telegram.sendMessage(
             OWNER_ID, 
@@ -1353,4 +1506,4 @@ bot.on('text', async (ctx) => {
 });
 
 bot.launch();
-console.log('🤖 Bot is running successfully with multi-level Admin Management feature!');
+console.log('🤖 Bot is running successfully with assigned admin accounts!');
