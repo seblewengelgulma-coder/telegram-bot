@@ -441,14 +441,14 @@
                 });
                 const data = await res.json();
                 
+                console.log("ከባክ-ኢንድ የመጣው ዳታ:", data); // <<-- በ Console ማያ መከታተያ
+
                 if (data.success && data.user) {
-                    // ከባክ-ኢንድ የሚመጣውን ባላንስ ቁጥር መሆኑን አረጋግጦ መውሰድ
                     currentUser.balance = parseFloat(data.user.balance) || 0;
                     currentUser.userName = data.user.userName || currentUser.userName;
                     currentUser.dailyWins = data.user.dailyWins || 0;
                     currentUser.level = data.user.level || 1;
 
-                    // UI-ውን አዲስ በደረሰው ባላንስ ማደስ
                     updateUserUi();
                 }
             } catch (err) {
@@ -457,7 +457,6 @@
         }
 
         function updateUserUi() {
-            // balance ቁጥር መሆኑን እና የ null/undefined ስህተት እንዳይፈጠር መከላከል
             const balanceVal = Number(currentUser.balance || 0).toFixed(2);
 
             document.getElementById('user-name').innerText = currentUser.userName;
@@ -518,7 +517,6 @@
                 currentBingoRoomId = data.roomId;
                 bingoMatrixData = data.cardMatrix;
 
-                // ከባክ-ኢንድ መልስ በኋላ ባላንሱ በፍሮንት-ኢንድ መታደሱን ማረጋገጥ
                 if (data.newBalance !== undefined) {
                     currentUser.balance = parseFloat(data.newBalance);
                 } else if (data.user && data.user.balance !== undefined) {
@@ -537,7 +535,6 @@
         }
 
         function listenBingoEvents() {
-            // Server-Sent Events (SSE) ወይም WebSocket በመጠቀም ከBackend ጋር መገናኘት
             const eventSource = new EventSource(`${API_BASE}/bingo/stream/${currentBingoRoomId}`);
 
             eventSource.onmessage = (event) => {
@@ -601,7 +598,6 @@
                 if (data.success) {
                     showToast(`🎉 BINGO! ${data.reward} ETB አሸንፈዋል!`, 'fa-trophy');
                     
-                    // ከባክ-ኢንድ መልስ በኋላ ባላንሱ በፍሮንት-ኢንድ መታደሱን ማረጋገጥ
                     if (data.newBalance !== undefined) {
                         currentUser.balance = parseFloat(data.newBalance);
                     } else if (data.user && data.user.balance !== undefined) {
@@ -683,7 +679,6 @@
                     return;
                 }
 
-                // ከባክ-ኢንድ መልስ በኋላ ባላንሱ በፍሮንት-ኢንድ መታደሱን ማረጋገጥ
                 if (data.newBalance !== undefined) {
                     currentUser.balance = parseFloat(data.newBalance);
                 } else if (data.user && data.user.balance !== undefined) {
@@ -691,7 +686,6 @@
                 }
                 updateUserUi();
 
-                // Animate Drawn Numbers from Server Response
                 renderKenoDrawAnimation(data.drawnNumbers, data.hits, data.winAmount);
             } catch (err) {
                 showToast('❌ የሰርቨር ችግር አጋጥሟል!', 'fa-wifi');
@@ -771,7 +765,6 @@
                 if (data.success) {
                     showToast('✅ የዊዝድሮ ጥያቄ ቀርቧል!', 'fa-circle-check');
                     
-                    // ከባክ-ኢንድ መልስ በኋላ ባላንሱ በፍሮንት-ኢንድ መታደሱን ማረጋገጥ
                     if (data.newBalance !== undefined) {
                         currentUser.balance = parseFloat(data.newBalance);
                     } else if (data.user && data.user.balance !== undefined) {

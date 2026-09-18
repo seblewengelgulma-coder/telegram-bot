@@ -4,12 +4,17 @@ const cors = require('cors'); // Front-end ጥያቄዎችን ለመቀበል
 const { Telegraf, Markup } = require('telegraf');
 const mongoose = require('mongoose');
 const cron = require('node-cron');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Express Middlewares
-app.use(cors());
+// --- 🌐 Express CORS & Body Middlewares ማስተካከያ ---
+app.use(cors({
+    origin: '*', // ወይም የ Render/Telegram Mini App URL-ህን ማስገባት ትችላለህ
+    allowedHeaders: ['Content-Type', 'X-Telegram-Init-Data', 'Authorization'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+}));
 app.use(express.json());
 
 // --- 1. የሞንጎዲቢ ግንኙነት (MongoDB Connection) ---
@@ -233,7 +238,52 @@ async function getOrCreateUser(userId, userName = 'ተጫዋች') {
 
 // --- 🌐 የ FRONT-END Web App API CONNECTIONS ---
 
-// 1. የተጠቃሚ ፕሮፋይል እና ባላንስ መረጃ ማምጫ API
+// 🎯 አዲስ፡ በፍሮንት-ኢንዱ የሚጠበቀው የ Profile Endpoint
+app.get('/api/user/profile', async (req, res) => {
+    try {
+        let userId = req.query.userId;
+
+        // የ Init Data ከ Header ማውጣት (ካለ)
+        const initDataRaw = req.headers['x-telegram-init-data'];
+        if (!userId && initDataRaw) {
+            const params = new URLSearchParams(initDataRaw);
+            const userStr = params.get('user');
+            if (userStr) {
+                try {
+                    const parsedUser = JSON.parse(userStr);
+                    userId = parsedUser.id;
+                } catch (e) {}
+            }
+        }
+
+        if (!userId) {
+            return res.status(400).json({ success: false, message: 'የተጠቃሚ ID አልተላከም' });
+        }
+
+        const user = await User.findOne({ userId: Number(userId) });
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'ተጫዋች አልተገኘም' });
+        }
+
+        return res.json({
+            success: true,
+            user: {
+                telegramId: user.userId,
+                userName: user.userName || 'ተጫዋች',
+                balance: Number(user.balance) || 0,
+                dailyWins: user.dailyWins || 0,
+                level: user.level || 1,
+                wins: user.wins || 0,
+                totalGames: user.totalGames || 0
+            }
+        });
+    } catch (error) {
+        console.error("Profile Endpoint Error:", error);
+        res.status(500).json({ success: false, message: 'Server error: ' + error.message });
+    }
+});
+
+// 1. የተጠቃሚ ፕሮፋይል እና ባላንስ መረጃ ማምጫ API (ያለው Endpoint)
 app.get('/api/user/:userId', async (req, res) => {
     try {
         const userId = parseInt(req.params.userId);
@@ -251,12 +301,12 @@ app.get('/api/user/:userId', async (req, res) => {
 app.post('/api/deposit', async (req, res) => {
     try {
         const { userId, amount, photoId } = req.body;
-        let user = await User.findOne({ userId });
+        let user = await User.findOne({ userId: Number(userId) });
         if (!user) return res.status(404).json({ success: false, message: 'ተጠቃሚ አልተገኘም' });
 
         const assignedAdminId = user.assignedAdminId || OWNER_ID;
         const newReq = new RequestModel({
-            userId,
+            userId: Number(userId),
             assignedAdminId,
             userName: user.userName,
             type: 'deposit',
@@ -282,9 +332,9 @@ app.post('/api/deposit', async (req, res) => {
 app.post('/api/withdraw', async (req, res) => {
     try {
         const { userId, amount, phone } = req.body;
-        let user = await User.findOne({ userId });
+        let user = await User.findOne({ userId: Number(userId) });
         
-        if (!user || user.balance < amount) {
+        if (!user || user.balance < Number(amount)) {
             return res.status(400).json({ success: false, message: 'በቂ ባላንስ የለዎትም!' });
         }
 
@@ -293,7 +343,7 @@ app.post('/api/withdraw', async (req, res) => {
 
         const assignedAdminId = user.assignedAdminId || OWNER_ID;
         const newReq = new RequestModel({
-            userId,
+            userId: Number(userId),
             assignedAdminId,
             userName: user.userName,
             type: 'withdraw',
@@ -318,9 +368,9 @@ app.post('/api/withdraw', async (req, res) => {
 app.post('/api/keno/play', async (req, res) => {
     try {
         const { userId, betAmount, winAmount, isWin } = req.body;
-        let user = await User.findOne({ userId });
+        let user = await User.findOne({ userId: Number(userId) });
 
-        if (!user || user.balance < betAmount) {
+        if (!user || user.balance < Number(betAmount)) {
             return res.status(400).json({ success: false, message: 'በቂ ባላንስ የለዎትም!' });
         }
 
@@ -441,7 +491,7 @@ function getFormattedBingoNumber(num) {
 async function getBingo1to75Keyboard(gameId) {
     let keyboard = [];
     let row = [];
-    
+
     let takenDocs = await TakenNumber.find({ gameId });
     let takenMap = {};
     takenDocs.forEach(doc => { takenMap[doc.number] = true; });
@@ -1131,7 +1181,7 @@ bot.action('start_keno_draw', async (ctx) => {
                             user.weeklyWins += 1;
                         }
 
-                        user.level += 1; 
+                        user.level += 1;
                     }
                     await user.save();
                 }
@@ -1696,16 +1746,16 @@ bot.on('photo', async (ctx) => {
         let assignedAdminId = userDoc?.assignedAdminId || OWNER_ID;
 
         delete userSteps[userId];
-        let newReq = new RequestModel({
+        let newReq = new RequestModel({ 
             userId, 
             assignedAdminId,
             userName, 
             type: 'deposit', 
-            amount,
+            amount, 
             details: 'Telegram Screenshot Deposit',
             photoUniqueId, 
             photoId, 
-            date: uploadDate
+            date: uploadDate 
         });
         await newReq.save();
 
@@ -1728,7 +1778,7 @@ bot.on('text', async (ctx) => {
         let step = userSteps[userId];
         if (step.action === 'admin_deposit_id') {
             const targetId = parseInt(text);
-            
+
             let targetUser = await User.findOne({ userId: targetId });
 
             if (!targetUser) {
@@ -1756,7 +1806,7 @@ bot.on('text', async (ctx) => {
             delete userSteps[userId];
 
             ctx.reply(`✅ ለተጫዋች ${targetUser.userName} (ID: \`${step.targetId}\`) **ETB ${amount}** ዲፖዚት ተደርጓል!`, { parse_mode: 'Markdown' });
-            
+
             return bot.telegram.sendMessage(step.targetId, `🎉 አድሚን አካውንትዎን በ **ETB ${amount}** ሞልቶታል። 💰`).catch(()=>{});
         } else if (step.action === 'admin_reply_comment') {
             let commentId = step.commentId;
@@ -1775,11 +1825,11 @@ bot.on('text', async (ctx) => {
 
     if (userSteps[userId]) {
         let stepInfo = userSteps[userId];
-        
+
         if (stepInfo.action === 'deposit_amount') {
             const amount = parseInt(text.match(/\d+/)?.[0] || 0);
             if (amount <= 0) return ctx.reply(`❌ ትክክለኛ የብር መጠን ያስገቡ።`);
-            
+
             userSteps[userId] = { action: 'deposit_screenshot', amount };
             return ctx.reply(`📸 እባክዎ **የክፍያ ስክሪንሾት (Screenshot)** ፎቶ ይላኩልን:`);
         }
@@ -1789,7 +1839,7 @@ bot.on('text', async (ctx) => {
             delete userSteps[userId];
             let user = await getOrCreateUser(userId);
             if (user.balance < amount) return ctx.reply(`❌ በቂ ባላንስ የለዎትም!`);
-            
+
             user.balance -= amount;
             await user.save();
 
@@ -1818,7 +1868,7 @@ bot.on('text', async (ctx) => {
 
         if (userSteps[userId]?.action === 'comment_waiting') {
             delete userSteps[userId];
-            
+
             let userDoc = await User.findOne({ userId });
             let assignedAdminId = userDoc?.assignedAdminId || OWNER_ID;
 
@@ -1829,7 +1879,7 @@ bot.on('text', async (ctx) => {
                 message: text 
             });
             await newComment.save();
-            
+
             ctx.reply(`✅ አስተያየትዎ ለአድሚን ተልኳል!`, mainKeyboard);
 
             let adminMsg = `📌 **አዲስ አስተያየት (Comment) መጣ!**\n\n👤 **ከ:** ${ctx.from.first_name} (ID: \`${userId}\`)\n💬 **መልእክት:** "${text}"`;
@@ -1840,7 +1890,6 @@ bot.on('text', async (ctx) => {
 });
 
 // --- 7. SERVER & BOT START ---
-const path = require('path');
 
 // 'public' ፎልደር ውስጥ ያሉትን static ፋይሎች እንዲያነብ ማድረግ
 app.use(express.static(path.join(__dirname, 'public')));
