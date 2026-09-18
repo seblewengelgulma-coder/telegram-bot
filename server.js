@@ -238,7 +238,7 @@ async function getOrCreateUser(userId, userName = 'ተጫዋች') {
 
 // --- 🌐 የ FRONT-END Web App API CONNECTIONS ---
 
-// 🎯 አዲስ፡ በፍሮንት-ኢንዱ የሚጠበቀው የ Profile Endpoint
+// 🎯 በፍሮንት-ኢንዱ የሚጠበቀው የ Profile Endpoint
 app.get('/api/user/profile', async (req, res) => {
     try {
         let userId = req.query.userId;
@@ -283,7 +283,7 @@ app.get('/api/user/profile', async (req, res) => {
     }
 });
 
-// 1. የተጠቃሚ ፕሮፋይል እና ባላንስ መረጃ ማምጫ API (ያለው Endpoint)
+// 1. የተጠቃሚ ፕሮፋይል እና ባላንስ መረጃ ማምጫ API
 app.get('/api/user/:userId', async (req, res) => {
     try {
         const userId = parseInt(req.params.userId);
@@ -364,38 +364,62 @@ app.post('/api/withdraw', async (req, res) => {
     }
 });
 
-// 4. የኬኖ ጨዋታ ውጤት እና ባላንስ ማስተካከያ API
+// 4. የኬኖ ጨዋታ ውጤት እና ባላንስ ማስተካከያ API (የተስተካከለ)
 app.post('/api/keno/play', async (req, res) => {
     try {
-        const { userId, betAmount, winAmount, isWin } = req.body;
+        const { userId, betAmount, selectedNumbers } = req.body;
+        
+        if (!userId || !selectedNumbers || selectedNumbers.length === 0) {
+            return res.status(400).json({ success: false, message: 'እባክዎ የተሟላ ዳታ ይላኩ!' });
+        }
+
         let user = await User.findOne({ userId: Number(userId) });
 
         if (!user || user.balance < Number(betAmount)) {
             return res.status(400).json({ success: false, message: 'በቂ ባላንስ የለዎትም!' });
         }
 
-        // ባላንስ መቀነስ (የውርርዱን ያህል)
+        // 20 የኬኖ ቁጥሮችን በዘፈቀደ ማውጣት
+        let allNums = Array.from({ length: 80 }, (_, i) => i + 1);
+        let drawnNumbers = [];
+        while (drawnNumbers.length < 20) {
+            let rIdx = Math.floor(Math.random() * allNums.length);
+            drawnNumbers.push(allNums.splice(rIdx, 1)[0]);
+        }
+
+        // የገጠሙ ቁጥሮችን ማስላት
+        let matches = selectedNumbers.filter(n => drawnNumbers.includes(n));
+        let matchCount = matches.length;
+        let selectedCount = selectedNumbers.length;
+        let winAmount = 0;
+
+        if (matchCount === selectedCount) {
+            let multipliers = { 1: 0.5, 2: 1.2, 3: 1.6, 4: 2.2, 5: 2.8, 6: 3.5, 7: 4.5, 8: 6, 9: 10, 10: 20 };
+            let multiplier = multipliers[selectedCount] || 0;
+            winAmount = Math.round(Number(betAmount) + (Number(betAmount) * multiplier));
+        }
+
         user.balance -= Number(betAmount);
         user.totalGames += 1;
 
-        if (isWin && winAmount > 0) {
-            user.balance += Number(winAmount);
+        if (winAmount > 0) {
+            user.balance += winAmount;
             user.wins += 1;
             user.dailyWins += 1;
-
-            if (user.dailyWins === DAILY_WIN_GOAL) {
-                user.qualifiedDays += 1;
-            }
-            if (user.dailyWins >= DAILY_WIN_GOAL) {
-                user.weeklyWins += 1;
-            }
             user.level += 1;
         } else {
             user.losses += 1;
         }
 
         await user.save();
-        res.json({ success: true, newBalance: user.balance });
+
+        return res.json({
+            success: true,
+            drawnNumbers,
+            matchesCount: matchCount,
+            winAmount,
+            newBalance: user.balance
+        });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }

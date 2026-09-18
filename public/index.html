@@ -440,8 +440,6 @@
                     }
                 });
                 const data = await res.json();
-                
-                console.log("ከባክ-ኢንድ የመጣው ዳታ:", data); // <<-- በ Console ማያ መከታተያ
 
                 if (data.success && data.user) {
                     currentUser.balance = parseFloat(data.user.balance) || 0;
@@ -660,25 +658,40 @@
             document.getElementById('keno-selected-count').innerText = '0/10';
         }
 
+        // ኬኖ ጨዋታን ማስጀመር (Updated)
         async function startKenoDraw() {
-            if (kenoSelectedNumbers.length === 0) {
-                showToast('❌ ቢያንስ 1 ቁጥር ይምረጡ!', 'fa-triangle-exclamation');
+            const selectedKenoNumbers = kenoSelectedNumbers;
+            const currentKenoBet = kenoBet;
+
+            if (typeof selectedKenoNumbers === 'undefined' || selectedKenoNumbers.length === 0) {
+                showToast("እባክዎ ቢያንስ አንድ ቁጥር ይምረጡ!", "fa-triangle-exclamation");
                 return;
             }
 
+            const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || currentUser.telegramId;
+
             try {
-                const res = await fetch(`${API_BASE}/keno/play`, {
+                const response = await fetch('/api/keno/play', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tg?.initData || '' },
-                    body: JSON.stringify({ betAmount: kenoBet, selectedNumbers: kenoSelectedNumbers })
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-Telegram-Init-Data': tg?.initData || ''
+                    },
+                    body: JSON.stringify({
+                        userId: userId,
+                        betAmount: currentKenoBet || 10,
+                        selectedNumbers: selectedKenoNumbers
+                    })
                 });
-                const data = await res.json();
+
+                const data = await response.json();
 
                 if (!data.success) {
-                    showToast(`❌ ${data.message}`, 'fa-triangle-exclamation');
+                    showToast(data.message || "ስህተት ተፈጥሯል", "fa-triangle-exclamation");
                     return;
                 }
 
+                // የባላንስ ማሳወቂያ ማዘመን
                 if (data.newBalance !== undefined) {
                     currentUser.balance = parseFloat(data.newBalance);
                 } else if (data.user && data.user.balance !== undefined) {
@@ -686,10 +699,18 @@
                 }
                 updateUserUi();
 
-                renderKenoDrawAnimation(data.drawnNumbers, data.hits, data.winAmount);
-            } catch (err) {
-                showToast('❌ የሰርቨር ችግር አጋጥሟል!', 'fa-wifi');
+                // ውጤቱን በፍሮንት-ኢንድ ማሳየት
+                const hits = data.matchesCount !== undefined ? data.matchesCount : (data.hits !== undefined ? data.hits : 0);
+                renderKenoDrawAnimation(data.drawnNumbers || [], hits, data.winAmount || 0);
+
+            } catch (error) {
+                console.error("Keno Play Error:", error);
+                showToast("ከሰርቨር ጋር ማገናኘት አልተቻለም!", "fa-wifi");
             }
+        }
+
+        function showKenoResults(drawnNumbers, matchesCount, winAmount) {
+            renderKenoDrawAnimation(drawnNumbers, matchesCount, winAmount);
         }
 
         function renderKenoDrawAnimation(drawn20, hits, winAmount) {
