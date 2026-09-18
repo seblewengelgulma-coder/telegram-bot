@@ -1840,8 +1840,14 @@ bot.on('text', async (ctx) => {
 });
 
 // --- 7. SERVER & BOT START ---
+const path = require('path');
+
+// 'public' ፎልደር ውስጥ ያሉትን static ፋይሎች እንዲያነብ ማድረግ
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Root path ሲከፈት index.html እንዲልክ ማድረግ
 app.get('/', (req, res) => {
-    res.send('Efuye Bingo & Keno Ultimate Backend & API Server is running!');
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 bot.launch().then(() => {
