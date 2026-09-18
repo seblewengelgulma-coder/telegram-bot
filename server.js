@@ -1,6 +1,6 @@
 require('dotenv').config();
 const express = require('express');
-const cors = require('cors'); // Front-end ጥያቄዎችን ለመቀበል
+const cors = require('cors');
 const { Telegraf, Markup } = require('telegraf');
 const mongoose = require('mongoose');
 const cron = require('node-cron');
@@ -9,9 +9,9 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// --- 🌐 Express CORS & Body Middlewares ማስተካከያ ---
+// --- 🌐 Express CORS & Body Middlewares ---
 app.use(cors({
-    origin: '*', // ወይም የ Render/Telegram Mini App URL-ህን ማስገባት ትችላለህ
+    origin: '*',
     allowedHeaders: ['Content-Type', 'X-Telegram-Init-Data', 'Authorization'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
@@ -236,14 +236,11 @@ async function getOrCreateUser(userId, userName = 'ተጫዋች') {
     return user;
 }
 
-// --- 🌐 የ FRONT-END Web App API CONNECTIONS ---
+// --- 🌐 የ FRONT-END Mini App API CONNECTIONS ---
 
-// 🎯 በፍሮንት-ኢንዱ የሚጠበቀው የ Profile Endpoint
 app.get('/api/user/profile', async (req, res) => {
     try {
         let userId = req.query.userId;
-
-        // የ Init Data ከ Header ማውጣት (ካለ)
         const initDataRaw = req.headers['x-telegram-init-data'];
         if (!userId && initDataRaw) {
             const params = new URLSearchParams(initDataRaw);
@@ -283,7 +280,6 @@ app.get('/api/user/profile', async (req, res) => {
     }
 });
 
-// 1. የተጠቃሚ ፕሮፋይል እና ባላንስ መረጃ ማምጫ API
 app.get('/api/user/:userId', async (req, res) => {
     try {
         const userId = parseInt(req.params.userId);
@@ -297,7 +293,98 @@ app.get('/api/user/:userId', async (req, res) => {
     }
 });
 
-// 2. የዲፖዚት ጥያቄ መላኪያ API
+// 🎯 Mini App Bingo Pick API Endpoint (ለቢንጎ ቁጥር መምረጫ የተጨመረ)
+app.post('/api/bingo/pick', async (req, res) => {
+    try {
+        const { userId, cost, number } = req.body;
+        if (!userId || !cost || !number) {
+            return res.status(400).json({ success: false, message: 'ያልተሟላ መረጃ!' });
+        }
+
+        let user = await User.findOne({ userId: Number(userId) });
+        if (!user || (!isAdmin(userId) && user.balance < Number(cost))) {
+            return res.status(400).json({ success: false, message: 'በቂ ባላንስ የለዎትም!' });
+        }
+
+        let gameId = waitingRoom[cost]?.gameId || ('wait_' + cost + '_' + Date.now());
+        let existing = await TakenNumber.findOne({ gameId, number: Number(number) });
+        if (existing) {
+            return res.status(400).json({ success: false, message: 'ይህ ቁጥር ተይዟል!' });
+        }
+
+        await TakenNumber.create({ gameId, number: Number(number), userId: Number(userId), userName: user.userName });
+
+        if (!isAdmin(userId)) {
+            user.balance -= Number(cost);
+            user.totalGames += 1;
+            await user.save();
+        }
+
+        let matrix = generateRandomBingoCard();
+        if (!waitingRoom[cost]) {
+            waitingRoom[cost] = { gameId, players: [] };
+        }
+
+        let isFirstInRoom = waitingRoom[cost].players.length === 0;
+        let dispNum = getFormattedBingoNumber(Number(number));
+
+        waitingRoom[cost].players.push({
+            userId: Number(userId),
+            matrix,
+            cost: Number(cost),
+            pickedNum: dispNum,
+            fromMiniApp: true
+        });
+
+        if (isFirstInRoom) {
+            runBingoQueue(cost, gameId);
+        }
+
+        return res.json({
+            success: true,
+            gameId,
+            matrix,
+            newBalance: user.balance,
+            message: 'ቁጥሩ በተሳካ ሁኔታ ተመርጧል'
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// 🎯 Bingo Status API Endpoint
+app.get('/api/bingo/status', async (req, res) => {
+    try {
+        const { userId, gameId } = req.query;
+        let userGame = activeGames[userId];
+
+        if (userGame) {
+            let session = roomSessions[userGame.gameId];
+            return res.json({
+                success: true,
+                status: 'active',
+                currentBall: session ? getFormattedBingoNumber(session.drawnNumber) : '--',
+                history: session ? session.drawnHistory.map(n => getFormattedBingoNumber(n)) : [],
+                matrix: userGame.matrix
+            });
+        }
+
+        let waiting = Object.values(waitingRoom).find(r => r.gameId === gameId);
+        if (waiting) {
+            return res.json({
+                success: true,
+                status: 'waiting',
+                playersCount: waiting.players.length,
+                pool: waiting.players.length * (waiting.players[0]?.cost || 10)
+            });
+        }
+
+        return res.json({ success: true, status: 'none' });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 app.post('/api/deposit', async (req, res) => {
     try {
         const { userId, amount, photoId } = req.body;
@@ -316,7 +403,6 @@ app.post('/api/deposit', async (req, res) => {
         });
         await newReq.save();
 
-        // ለአድሚን በቴሌግራም ቦት ማሳወቂያ መላክ
         bot.telegram.sendMessage(assignedAdminId, 
             `📥 **አዲስ የዲፖዚት ጥያቄ (ከMini App)!**\n\n👤 **ስም:** ${user.userName} (ID: \`${userId}\`)\n💰 **መጠን:** ETB ${amount}`,
             { parse_mode: 'Markdown' }
@@ -328,7 +414,6 @@ app.post('/api/deposit', async (req, res) => {
     }
 });
 
-// 3. የዊዝድሮ ጥያቄ መላኪያ API
 app.post('/api/withdraw', async (req, res) => {
     try {
         const { userId, amount, phone } = req.body;
@@ -352,7 +437,6 @@ app.post('/api/withdraw', async (req, res) => {
         });
         await newReq.save();
 
-        // ለአድሚን በቴሌግራም ቦት ማሳወቂያ መላክ
         bot.telegram.sendMessage(assignedAdminId, 
             `📥 **አዲስ የዊዝድሮ ጥያቄ (ከMini App)!**\n\n👤 **ስም:** ${user.userName} (ID: \`${userId}\`)\n💰 **መጠን:** ETB ${amount}\n📱 **ስልክ:** ${phone || user.phone}`,
             { parse_mode: 'Markdown' }
@@ -364,7 +448,6 @@ app.post('/api/withdraw', async (req, res) => {
     }
 });
 
-// 4. የኬኖ ጨዋታ ውጤት እና ባላንስ ማስተካከያ API (የተስተካከለ)
 app.post('/api/keno/play', async (req, res) => {
     try {
         const { userId, betAmount, selectedNumbers } = req.body;
@@ -379,7 +462,6 @@ app.post('/api/keno/play', async (req, res) => {
             return res.status(400).json({ success: false, message: 'በቂ ባላንስ የለዎትም!' });
         }
 
-        // 20 የኬኖ ቁጥሮችን በዘፈቀደ ማውጣት
         let allNums = Array.from({ length: 80 }, (_, i) => i + 1);
         let drawnNumbers = [];
         while (drawnNumbers.length < 20) {
@@ -387,7 +469,6 @@ app.post('/api/keno/play', async (req, res) => {
             drawnNumbers.push(allNums.splice(rIdx, 1)[0]);
         }
 
-        // የገጠሙ ቁጥሮችን ማስላት
         let matches = selectedNumbers.filter(n => drawnNumbers.includes(n));
         let matchCount = matches.length;
         let selectedCount = selectedNumbers.length;
@@ -911,15 +992,17 @@ function runBingoQueue(cost, gameId) {
         let estimatedPool = cost * currentPlayersCount;
 
         for (let p of room) {
-            try {
-                await p.ctx.editMessageText(
-                    `⏳ **ቁጥር ${p.pickedNum} ተመርጧል! ተጫዋቾችን በመጠበቅ ላይ...**\n` +
-                    `⏱ የቀረው ጊዜ፡ **${countdown} ሰከንድ**\n` +
-                    `👥 የተጫዋቾች ብዛት: **${currentPlayersCount}**\n` +
-                    `💰 አጠቃላይ ፖል (Pool): **ETB ${estimatedPool}**`,
-                    Markup.inlineKeyboard([])
-                );
-            } catch (e) {}
+            if (p.ctx) {
+                try {
+                    await p.ctx.editMessageText(
+                        `⏳ **ቁጥር ${p.pickedNum} ተመርጧል! ተጫዋቾችን በመጠበቅ ላይ...**\n` +
+                        `⏱ የቀረው ጊዜ፡ **${countdown} ሰከንድ**\n` +
+                        `👥 የተጫዋቾች ብዛት: **${currentPlayersCount}**\n` +
+                        `💰 አጠቃላይ ፖል (Pool): **ETB ${estimatedPool}**`,
+                        Markup.inlineKeyboard([])
+                    );
+                } catch (e) {}
+            }
         }
 
         if (countdown <= 0) {
@@ -933,9 +1016,11 @@ function runBingoQueue(cost, gameId) {
                         pUser.totalGames -= 1;
                         await pUser.save();
                     }
-                    try {
-                        await p.ctx.editMessageText(`⚠️ **በቂ ተጫዋች ባለመገኘቱ ጨዋታው ተሰርዟል! ገንዘብዎ ተመልሷል።**`);
-                    } catch (e) {}
+                    if (p.ctx) {
+                        try {
+                            await p.ctx.editMessageText(`⚠️ **በቂ ተጫዋች ባለመገኘቱ ጨዋታው ተሰርዟል! ገንዘብዎ ተመልሷል።**`);
+                        } catch (e) {}
+                    }
                 }
                 delete waitingRoom[cost];
                 await TakenNumber.deleteMany({ gameId });
@@ -995,7 +1080,7 @@ function runBingoQueue(cost, gameId) {
 
                 for (let pId of session.roomPlayers) {
                     let userGame = activeGames[pId];
-                    if (userGame && userGame.gameId === activeGameSessionId) {
+                    if (userGame && userGame.gameId === activeGameSessionId && userGame.messageId) {
                         try {
                             let messageText = 
                                 `🎲 <b>ጨዋታ በሂደት ላይ... (ETB ${session.cost})</b>\n` +
@@ -1915,16 +2000,25 @@ bot.on('text', async (ctx) => {
 
 // --- 7. SERVER & BOT START ---
 
-// 'public' ፎልደር ውስጥ ያሉትን static ፋይሎች እንዲያነብ ማድረግ
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Root path ሲከፈት index.html እንዲልክ ማድረግ
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// 🎯 ቦቱ ሲነሳ ለሁሉም ተጫዋቾች ከታች Mini App Button መጨመሪያ
 bot.launch().then(() => {
     console.log('🤖 Telegram Bot is running...');
+    
+    // ቦቱ ከታች የ Mini App Button እንዲኖረው የ Menu Button ማስተካከያ
+    const WEB_APP_URL = process.env.WEB_APP_URL || 'https://https://telegram-bot-xer2.onrender.com/'; // እዚህ ጋር የ Render URL-ዎን ማስገባት ይችላሉ
+    bot.telegram.setChatMenuButton({
+        menu_button: {
+            type: 'web_app',
+            text: '🎮 Mini App',
+            web_app: { url: WEB_APP_URL }
+        }
+    }).catch(err => console.log('Menu Button Error:', err.message));
 });
 
 app.listen(PORT, () => {

@@ -409,6 +409,7 @@
         let bingoMatrixData = [];
         let kenoBet = 10;
         let kenoSelectedNumbers = [];
+        let bingoPollInterval = null;
 
         window.addEventListener('DOMContentLoaded', async () => {
             initTelegramSdk();
@@ -500,20 +501,27 @@
 
         async function joinBingoRoom(num) {
             try {
-                const res = await fetch(`${API_BASE}/bingo/join`, {
+                const res = await fetch(`${API_BASE}/bingo/pick`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tg?.initData || '' },
-                    body: JSON.stringify({ betAmount: bingoBet, startNum: num })
+                    headers: { 
+                        'Content-Type': 'application/json', 
+                        'X-Telegram-Init-Data': tg?.initData || '' 
+                    },
+                    body: JSON.stringify({ 
+                        userId: currentUser.telegramId,
+                        cost: bingoBet, 
+                        number: num 
+                    })
                 });
                 const data = await res.json();
 
                 if (!data.success) {
-                    showToast(`❌ ${data.message}`, 'fa-triangle-exclamation');
+                    showToast(`❌ ${data.message || 'መግባት አልተቻለም!'}`, 'fa-triangle-exclamation');
                     return;
                 }
 
-                currentBingoRoomId = data.roomId;
-                bingoMatrixData = data.cardMatrix;
+                currentBingoRoomId = data.gameId || data.roomId;
+                if (data.matrix) bingoMatrixData = data.matrix;
 
                 if (data.newBalance !== undefined) {
                     currentUser.balance = parseFloat(data.newBalance);
@@ -526,32 +534,51 @@
                 document.getElementById('bingo-bet-selector').classList.add('hidden');
                 document.getElementById('bingo-waiting-card').classList.remove('hidden');
 
-                listenBingoEvents();
+                startBingoPolling();
             } catch (err) {
                 showToast('❌ የሰርቨር ግንኙነት ችግር አጋጥሟል!', 'fa-wifi');
             }
         }
 
-        function listenBingoEvents() {
-            const eventSource = new EventSource(`${API_BASE}/bingo/stream/${currentBingoRoomId}`);
+        function startBingoPolling() {
+            if (bingoPollInterval) clearInterval(bingoPollInterval);
+            bingoPollInterval = setInterval(async () => {
+                try {
+                    const res = await fetch(`${API_BASE}/bingo/status?userId=${currentUser.telegramId}&gameId=${currentBingoRoomId}`, {
+                        headers: { 'X-Telegram-Init-Data': tg?.initData || '' }
+                    });
+                    const data = await res.json();
 
-            eventSource.onmessage = (event) => {
-                const msg = JSON.parse(event.data);
-                
-                if (msg.type === 'GAME_START') {
-                    document.getElementById('bingo-waiting-card').classList.add('hidden');
-                    document.getElementById('bingo-live-board').classList.remove('hidden');
-                    renderBingoMatrix();
-                } else if (msg.type === 'BALL_DRAWN') {
-                    const ballDisplay = document.getElementById('bingo-current-ball');
-                    ballDisplay.innerText = getBingoFormatted(msg.ball);
-                    document.getElementById('bingo-history-balls').innerText = msg.history.map(n => getBingoFormatted(n)).join(', ');
-                } else if (msg.type === 'GAME_OVER') {
-                    eventSource.close();
-                    showToast(msg.winnerId === currentUser.telegramId ? '🎉 BINGO አሸንፈዋል!' : '❌ ጨዋታው ተጠናቋል', 'fa-trophy');
-                    setTimeout(() => location.reload(), 3000);
+                    if (data.playersCount !== undefined) {
+                        document.getElementById('bingo-players-count').innerText = data.playersCount;
+                    }
+                    if (data.pool !== undefined) {
+                        document.getElementById('bingo-pool-amount').innerText = data.pool;
+                    }
+
+                    if (data.status === 'active') {
+                        document.getElementById('bingo-waiting-card').classList.add('hidden');
+                        document.getElementById('bingo-live-board').classList.remove('hidden');
+                        
+                        if (data.currentBall) {
+                            document.getElementById('bingo-current-ball').innerText = getBingoFormatted(data.currentBall);
+                        }
+                        if (data.history) {
+                            document.getElementById('bingo-history-balls').innerText = data.history.map(n => getBingoFormatted(n)).join(', ');
+                        }
+                        if (data.matrix && bingoMatrixData.length === 0) {
+                            bingoMatrixData = data.matrix;
+                            renderBingoMatrix();
+                        }
+                    } else if (data.status === 'completed' || data.status === 'ended') {
+                        clearInterval(bingoPollInterval);
+                        showToast(data.winnerId === currentUser.telegramId ? '🎉 BINGO አሸንፈዋል!' : '❌ ጨዋታው ተጠናቋል', 'fa-trophy');
+                        setTimeout(() => location.reload(), 3000);
+                    }
+                } catch (e) {
+                    console.error("Bingo status error", e);
                 }
-            };
+            }, 2000);
         }
 
         function renderBingoMatrix() {
@@ -572,7 +599,7 @@
                     }
 
                     cellBtn.className = baseClass;
-                    cellBtn.innerText = cell.isFree ? '⭐' : getBingoFormatted(cell.rawNum);
+                    cellBtn.innerText = cell.isFree ? '⭐' : getBingoFormatted(cell.rawNum || cell);
                     cellBtn.onclick = () => toggleBingoCell(rIdx, cIdx);
                     grid.appendChild(cellBtn);
                 });
@@ -580,7 +607,9 @@
         }
 
         function toggleBingoCell(r, c) {
-            bingoMatrixData[r][c].marked = !bingoMatrixData[r][c].marked;
+            if (typeof bingoMatrixData[r][c] === 'object') {
+                bingoMatrixData[r][c].marked = !bingoMatrixData[r][c].marked;
+            }
             renderBingoMatrix();
         }
 
@@ -658,7 +687,6 @@
             document.getElementById('keno-selected-count').innerText = '0/10';
         }
 
-        // ኬኖ ጨዋታን ማስጀመር (Updated)
         async function startKenoDraw() {
             const selectedKenoNumbers = kenoSelectedNumbers;
             const currentKenoBet = kenoBet;
@@ -671,7 +699,7 @@
             const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || currentUser.telegramId;
 
             try {
-                const response = await fetch('/api/keno/play', {
+                const response = await fetch(`${API_BASE}/keno/play`, {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
@@ -691,7 +719,6 @@
                     return;
                 }
 
-                // የባላንስ ማሳወቂያ ማዘመን
                 if (data.newBalance !== undefined) {
                     currentUser.balance = parseFloat(data.newBalance);
                 } else if (data.user && data.user.balance !== undefined) {
@@ -699,7 +726,6 @@
                 }
                 updateUserUi();
 
-                // ውጤቱን በፍሮንት-ኢንድ ማሳየት
                 const hits = data.matchesCount !== undefined ? data.matchesCount : (data.hits !== undefined ? data.hits : 0);
                 renderKenoDrawAnimation(data.drawnNumbers || [], hits, data.winAmount || 0);
 
@@ -709,43 +735,41 @@
             }
         }
 
-        function showKenoResults(drawnNumbers, matchesCount, winAmount) {
-            renderKenoDrawAnimation(drawnNumbers, matchesCount, winAmount);
-        }
-
         function renderKenoDrawAnimation(drawn20, hits, winAmount) {
             const progressContainer = document.getElementById('keno-draw-progress');
             const ballsContainer = document.getElementById('keno-drawn-balls-container');
             progressContainer.classList.remove('hidden');
             ballsContainer.innerHTML = '';
 
-            let idx = 0;
-            let timer = setInterval(() => {
-                if (idx < drawn20.length) {
-                    let num = drawn20[idx];
-                    idx++;
-
+            let drawnIdx = 0;
+            // የወጡት ቁጥሮች በየ 3 ሰከንዱ (3000ms) በፍፁም ግልፅነትና እኩል ፍጥነት እንዲወጡ ተደርጓል
+            let interval = setInterval(() => {
+                if (drawnIdx < drawn20.length) {
+                    let ballNum = drawn20[drawnIdx];
+                    
                     const ball = document.createElement('span');
-                    let isHit = kenoSelectedNumbers.includes(num);
+                    let isHit = kenoSelectedNumbers.includes(ballNum);
 
                     if (isHit) {
                         ball.className = 'w-7 h-7 rounded-full bg-emerald-500 text-black font-extrabold text-xs flex items-center justify-center shadow-lg ball-pop';
-                        document.getElementById(`keno-btn-${num}`)?.classList.add('drawn-hit');
+                        document.getElementById(`keno-btn-${ballNum}`)?.classList.add('drawn-hit');
                     } else {
                         ball.className = 'w-7 h-7 rounded-full bg-purple-900/90 text-gray-200 font-semibold text-xs flex items-center justify-center border border-purple-700 ball-pop';
                     }
-                    ball.innerText = num;
+                    ball.innerText = ballNum;
                     ballsContainer.appendChild(ball);
                     document.getElementById('keno-hits-count').innerText = hits;
+
+                    drawnIdx++;
                 } else {
-                    clearInterval(timer);
+                    clearInterval(interval);
                     if (winAmount > 0) {
                         showToast(`🎉 ${winAmount} ETB አሸንፈዋል!`, 'fa-trophy');
                     } else {
                         showToast('❌ አልተሳካም። እንደገና ይሞክሩ!', 'fa-face-frown');
                     }
                 }
-            }, 200);
+            }, 3000); // 3000ms (3 ሰከንድ ማለፊያ)
         }
 
         /* --- DEPOSIT / WITHDRAW HANDLERS --- */
