@@ -433,11 +433,22 @@
         async function fetchUserProfile() {
             try {
                 const res = await fetch(`${API_BASE}/user/profile`, {
-                    headers: { 'X-Telegram-Init-Data': tg?.initData || '' }
+                    method: 'GET',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-Telegram-Init-Data': tg?.initData || '' 
+                    }
                 });
                 const data = await res.json();
-                if (data.success) {
-                    currentUser = { ...currentUser, ...data.user };
+                
+                if (data.success && data.user) {
+                    // ከባክ-ኢንድ የሚመጣውን ባላንስ ቁጥር መሆኑን አረጋግጦ መውሰድ
+                    currentUser.balance = parseFloat(data.user.balance) || 0;
+                    currentUser.userName = data.user.userName || currentUser.userName;
+                    currentUser.dailyWins = data.user.dailyWins || 0;
+                    currentUser.level = data.user.level || 1;
+
+                    // UI-ውን አዲስ በደረሰው ባላንስ ማደስ
                     updateUserUi();
                 }
             } catch (err) {
@@ -446,12 +457,15 @@
         }
 
         function updateUserUi() {
+            // balance ቁጥር መሆኑን እና የ null/undefined ስህተት እንዳይፈጠር መከላከል
+            const balanceVal = Number(currentUser.balance || 0).toFixed(2);
+
             document.getElementById('user-name').innerText = currentUser.userName;
             document.getElementById('user-avatar-initial').innerText = currentUser.userName.charAt(0).toUpperCase();
-            document.getElementById('user-balance-display').innerText = `${currentUser.balance.toFixed(2)} ETB`;
+            document.getElementById('user-balance-display').innerText = `${balanceVal} ETB`;
             document.getElementById('daily-wins-text').innerText = `${currentUser.dailyWins}/3`;
             document.getElementById('user-level-badge').innerText = `Lvl ${currentUser.level}`;
-            document.getElementById('withdraw-available-balance').innerText = `${currentUser.balance.toFixed(2)} ETB`;
+            document.getElementById('withdraw-available-balance').innerText = `${balanceVal} ETB`;
         }
 
         /* --- BINGO FRONTEND CONTROLLER --- */
@@ -503,7 +517,13 @@
 
                 currentBingoRoomId = data.roomId;
                 bingoMatrixData = data.cardMatrix;
-                currentUser.balance = data.newBalance;
+
+                // ከባክ-ኢንድ መልስ በኋላ ባላንሱ በፍሮንት-ኢንድ መታደሱን ማረጋገጥ
+                if (data.newBalance !== undefined) {
+                    currentUser.balance = parseFloat(data.newBalance);
+                } else if (data.user && data.user.balance !== undefined) {
+                    currentUser.balance = parseFloat(data.user.balance);
+                }
                 updateUserUi();
 
                 document.getElementById('bingo-pick-section').classList.add('hidden');
@@ -580,7 +600,13 @@
 
                 if (data.success) {
                     showToast(`🎉 BINGO! ${data.reward} ETB አሸንፈዋል!`, 'fa-trophy');
-                    currentUser.balance = data.newBalance;
+                    
+                    // ከባክ-ኢንድ መልስ በኋላ ባላንሱ በፍሮንት-ኢንድ መታደሱን ማረጋገጥ
+                    if (data.newBalance !== undefined) {
+                        currentUser.balance = parseFloat(data.newBalance);
+                    } else if (data.user && data.user.balance !== undefined) {
+                        currentUser.balance = parseFloat(data.user.balance);
+                    }
                     updateUserUi();
                 } else {
                     showToast(`❌ ${data.message}`, 'fa-triangle-exclamation');
@@ -657,7 +683,12 @@
                     return;
                 }
 
-                currentUser.balance = data.newBalance;
+                // ከባክ-ኢንድ መልስ በኋላ ባላንሱ በፍሮንት-ኢንድ መታደሱን ማረጋገጥ
+                if (data.newBalance !== undefined) {
+                    currentUser.balance = parseFloat(data.newBalance);
+                } else if (data.user && data.user.balance !== undefined) {
+                    currentUser.balance = parseFloat(data.user.balance);
+                }
                 updateUserUi();
 
                 // Animate Drawn Numbers from Server Response
@@ -739,7 +770,13 @@
                 const data = await res.json();
                 if (data.success) {
                     showToast('✅ የዊዝድሮ ጥያቄ ቀርቧል!', 'fa-circle-check');
-                    currentUser.balance = data.newBalance;
+                    
+                    // ከባክ-ኢንድ መልስ በኋላ ባላንሱ በፍሮንት-ኢንድ መታደሱን ማረጋገጥ
+                    if (data.newBalance !== undefined) {
+                        currentUser.balance = parseFloat(data.newBalance);
+                    } else if (data.user && data.user.balance !== undefined) {
+                        currentUser.balance = parseFloat(data.user.balance);
+                    }
                     updateUserUi();
                     document.getElementById('withdraw-form').reset();
                 } else {
