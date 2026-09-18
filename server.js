@@ -2011,7 +2011,7 @@ bot.launch().then(() => {
     console.log('🤖 Telegram Bot is running...');
     
     // ቦቱ ከታች የ Mini App Button እንዲኖረው የ Menu Button ማስተካከያ
-    const WEB_APP_URL = process.env.WEB_APP_URL || 'https://https://telegram-bot-xer2.onrender.com/'; // እዚህ ጋር የ Render URL-ዎን ማስገባት ይችላሉ
+    const WEB_APP_URL = process.env.WEB_APP_URL || 'https://telegram-bot-xer2.onrender.com/'; // እዚህ ጋር የ Render URL-ዎን ማስገባት ይችላሉ
     bot.telegram.setChatMenuButton({
         menu_button: {
             type: 'web_app',
