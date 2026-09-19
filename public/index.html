@@ -447,6 +447,7 @@
         let statusPollInterval = null;
         let bingoTimerInterval = null;
         let bingoBallInterval = null;
+        let isKenoPlaying = false; // ጨዋታ በሂደት ላይ መሆኑን ለመቆጣጠር
 
         // On Load initialization
         window.onload = async function() {
@@ -458,6 +459,10 @@
 
         // Tab Switching Logic
         function switchTab(tabId) {
+            if (isKenoPlaying) {
+                alert('እባክዎ የጀመሩት ጨዋታ እስኪጠናቀቅ ይጠብቁ!');
+                return;
+            }
             document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
             document.querySelectorAll('.nav-btn').forEach(el => {
                 el.classList.remove('text-amber-400');
@@ -512,6 +517,10 @@
 
         // Game Type Selection (Bingo vs Keno)
         function selectGameType(type) {
+            if (isKenoPlaying) {
+                alert('እባክዎ የጀመሩት ጨዋታ እስኪጠናቀቅ ይጠብቁ!');
+                return;
+            }
             const bingoBtn = document.getElementById('btnTabBingo');
             const kenoBtn = document.getElementById('btnTabKeno');
             const bingoCont = document.getElementById('gameBingoContainer');
@@ -581,7 +590,6 @@
             document.getElementById('bingoActiveDrawingArea').classList.add('hidden');
             document.getElementById('bingoStatusText').innerText = "ተጫዋቾችን በመጠበቅ ላይ (30 ሰከንድ ቆጣሪ)...";
 
-            // 30 Seconds Countdown timer for player check
             let timeLeft = 30;
             const timerDisplay = document.getElementById('bingoTimerDisplay');
             timerDisplay.innerText = `ቀሪ ሰዓት: ${timeLeft} ሰ`;
@@ -595,11 +603,9 @@
 
                 if (timeLeft <= 0) {
                     clearInterval(bingoTimerInterval);
-                    // Check if enough players joined (simulate check: if mock or backend check fails/no other players)
-                    let otherPlayersJoined = false; // Set to true if players join via backend
+                    let otherPlayersJoined = false;
 
                     if (!otherPlayersJoined) {
-                        // Refund money if no other players/not enough players joined within 30 seconds
                         currentUser.balance += selectedBingoCost;
                         updateUIProfile();
                         document.getElementById('bingoStatusText').innerText = "በቂ ተጫዋቾች አልተገኙም! ገንዘብዎ ተመላሽ ተደርጓል።";
@@ -612,9 +618,6 @@
                     }
                 }
             }, 1000);
-
-            // For instant testing/preview simulation, we can also trigger drawing after short or let timer finish.
-            // Let's hook up the 6 seconds interval ball draw mechanism as requested:
         }
 
         function startBingoGameDrawing() {
@@ -631,7 +634,6 @@
             ];
             renderActiveBingoCard(mockMatrix);
 
-            // BINGO Numbers drawing every 6 seconds check
             let ballsList = ['B7', 'I22', 'N32', 'G52', 'O68', 'B12', 'I25', 'N35', 'G58', 'O72'];
             let ballIndex = 0;
 
@@ -643,7 +645,7 @@
                 } else {
                     clearInterval(bingoBallInterval);
                 }
-            }, 6000); // exactly every 6 seconds as requested
+            }, 6000);
         }
 
         function renderActiveBingoCard(matrix) {
@@ -676,6 +678,7 @@
             gridEl.innerHTML = '';
             for (let i = 1; i <= 80; i++) {
                 let btn = document.createElement('button');
+                btn.id = `keno-btn-${i}`;
                 btn.className = "bg-cyber-900 border border-cyber-700 hover:border-cyan-500 text-white font-bold py-2 rounded-lg text-xs transition";
                 btn.innerText = i;
                 btn.onclick = () => toggleKenoNum(i, btn);
@@ -684,6 +687,7 @@
         }
 
         function toggleKenoNum(num, btnElement) {
+            if (isKenoPlaying) return; // ጨዋታ በሚካሄድበት ጊዜ ቁጥር መቀየር የተከለከለ ነው
             let idx = kenoSelectedNumbers.indexOf(num);
             if (idx > -1) {
                 kenoSelectedNumbers.splice(idx, 1);
@@ -702,6 +706,7 @@
         }
 
         function clearKenoSelection() {
+            if (isKenoPlaying) return;
             kenoSelectedNumbers = [];
             buildKenoGrid();
             document.getElementById('kenoCountDisplay').innerText = 0;
@@ -709,6 +714,7 @@
         }
 
         async function playKenoGame() {
+            if (isKenoPlaying) return; // ሌላ ጨዋታ እንዳይጀመር መቆጣጠሪያ
             let betAmount = parseFloat(document.getElementById('kenoBetInput').value) || 10;
             if (kenoSelectedNumbers.length === 0) return;
 
@@ -716,6 +722,9 @@
                 alert('በቂ ባላንስ የለዎትም!');
                 return;
             }
+
+            isKenoPlaying = true;
+            document.getElementById('submitKenoBtn').disabled = true;
 
             currentUser.balance -= betAmount;
             currentUser.totalGames += 1;
@@ -726,7 +735,6 @@
             let detailsEl = document.getElementById('kenoResultDetails');
             detailsEl.innerHTML = `<p class="text-cyan-400 animate-pulse">ኬኖ ቁጥሮች በየ 3 ሰከንዱ እየወጡ ነው...</p>`;
 
-            // Keno drawing numbers progressively every 3 seconds as requested
             let drawnPool = [];
             while(drawnPool.length < 20) {
                 let r = Math.floor(Math.random() * 80) + 1;
@@ -736,9 +744,20 @@
             let currentShownDrawn = [];
             let step = 0;
 
+            // በየ 3 ሰከንዱ የሚወጣ የኬኖ ሉፕ (በየ 3 ሰከንዱ እንድትጀምር የተደረገ)
             let kenoInterval = setInterval(() => {
                 if (step < 20) {
-                    currentShownDrawn.push(drawnPool[step]);
+                    let nextBall = drawnPool[step];
+                    currentShownDrawn.push(nextBall);
+                    
+                    // ተጫዋቹ የመረጠው ቁጥር ከወጣ በግሪዱ ላይ በባረንጓዴ ቀለም ማድመቅ (Green Highlight)
+                    if (kenoSelectedNumbers.includes(nextBall)) {
+                        let btnEl = document.getElementById(`keno-btn-${nextBall}`);
+                        if (btnEl) {
+                            btnEl.className = "bg-emerald-500 text-black border-2 border-emerald-300 font-extrabold py-2 rounded-lg text-xs transition scale-105";
+                        }
+                    }
+
                     let matchesSoFar = kenoSelectedNumbers.filter(n => currentShownDrawn.includes(n));
                     detailsEl.innerHTML = `
                         <p>የወጡ ቁጥሮች (${currentShownDrawn.length}/20): [${currentShownDrawn.join(', ')}]</p>
@@ -747,7 +766,8 @@
                     step++;
                 } else {
                     clearInterval(kenoInterval);
-                    // Final win evaluation
+                    isKenoPlaying = false; // ጨዋታው ሲጠናቀቅ ተጫዋቹ ሌላ ጨዋታ ማድረግ ይችላል
+
                     let matches = kenoSelectedNumbers.filter(n => drawnPool.includes(n));
                     let winAmt = matches.length >= 2 ? betAmount * (matches.length * 1.5) : (matches.length === 1 && kenoSelectedNumbers.length === 2 ? betAmount : 0);
                     currentUser.balance += winAmt;
@@ -759,12 +779,17 @@
                         <p>ትክክለኛ ግጥሚያዎች: <strong class="text-cyan-400">${matches.length}</strong> (${matches.join(', ') || 'የለም'})</p>
                         <p>ያሸነፉት ሽልማት: <strong class="text-amber-400">ETB ${winAmt.toFixed(2)}</strong></p>
                     `;
+                    document.getElementById('submitKenoBtn').disabled = false;
                 }
-            }, 3000); // Exactly every 3 seconds as requested
+            }, 3000); // በትክክል በየ 3 ሰከንዱ
         }
 
         // --- DEPOSIT & WITHDRAW MODALS ---
         function openModal(modalId) {
+            if (isKenoPlaying) {
+                alert('እባክዎ የጀመሩት ጨዋታ እስኪጠናቀቅ ይጠብቁ!');
+                return;
+            }
             document.getElementById(modalId).classList.remove('hidden');
         }
 
