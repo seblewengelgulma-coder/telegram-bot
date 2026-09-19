@@ -53,6 +53,15 @@ const userSchema = new mongoose.Schema({
 });
 const User = mongoose.model('User', userSchema);
 
+// 🎯 የቢንጎ ጨዋታ ስኬማ (BingoGame Schema ለ /api/bingo/timeout አስፈላጊ የሆነው)
+const bingoGameSchema = new mongoose.Schema({
+    gameId: { type: String, required: true, unique: true },
+    cost: { type: Number, required: true },
+    status: { type: String, default: 'waiting' }, // waiting, active, cancelled, finished
+    players: { type: Array, default: [] }
+});
+const BingoGame = mongoose.model('BingoGame', bingoGameSchema);
+
 const adminAccountSchema = new mongoose.Schema({
     adminId: { type: Number, required: true, unique: true },
     adminName: { type: String, required: true },
@@ -105,10 +114,8 @@ if (!TOKEN) {
 
 const bot = new Telegraf(TOKEN);
 
-// የመስራች አድሚን (Super Admin) ID
 const OWNER_ID = 380035906;
 
-// የረዳት አድሚኖች Telegram ID ዝርዝር
 let subAdmins = [
     897196934,
     356872111,
@@ -118,7 +125,6 @@ let subAdmins = [
     1694041775
 ];
 
-// የአድሚኖች አካውንትና ስልክ መረጃ
 const initialAdminAccounts = [
     {
         adminId: 380035906,
@@ -183,7 +189,6 @@ function isAdmin(userId) {
     return userId === OWNER_ID || subAdmins.includes(userId);
 }
 
-// REFERRAL LOGIC IN ASSIGNMENT
 async function assignAdminToUser(user, referrerId = null) {
     if (user.assignedAdminId) return user;
 
@@ -293,7 +298,31 @@ app.get('/api/user/:userId', async (req, res) => {
     }
 });
 
-// 🎯 Mini App Bingo Pick API Endpoint (ለቢንጎ ቁጥር መምረጫ የተጨመረ)
+// 🎯 የተጠየቀው /api/bingo/timeout ማስተካከያ ኤንድፖይንት
+app.post('/api/bingo/timeout', async (req, res) => {
+    try {
+        const { userId, gameId } = req.body;
+        // 1. ጨዋታው በጊዜ ማለቁን እና ተጫዋች አለመኖሩን አረጋግጥ
+        let game = await BingoGame.findOne({ gameId });
+        if (game && game.status === 'waiting' && game.players.length < 2) {
+            game.status = 'cancelled';
+            await game.save();
+
+            // 2. ያስያዘውን ገንዘብ ለተጫዋቹ መለስ (Refund)
+            let user = await User.findOne({ userId: Number(userId) });
+            if (user) {
+                user.balance += game.cost;
+                await user.save();
+                return res.json({ success: true, newBalance: user.balance });
+            }
+        }
+        res.json({ success: false, message: 'Already started or processed' });
+    } catch (err) {
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+});
+
+// 🎯 Mini App Bingo Pick API Endpoint
 app.post('/api/bingo/pick', async (req, res) => {
     try {
         const { userId, cost, number } = req.body;
@@ -335,6 +364,13 @@ app.post('/api/bingo/pick', async (req, res) => {
             pickedNum: dispNum,
             fromMiniApp: true
         });
+
+        // በተጨማሪም BingoGame ዳታቤዝ ላይ መመዝገብ/ማዘመን
+        await BingoGame.findOneAndUpdate(
+            { gameId },
+            { $set: { gameId, cost: Number(cost), status: 'waiting' }, $push: { players: Number(userId) } },
+            { upsert: true, new: true }
+        );
 
         if (isFirstInRoom) {
             runBingoQueue(cost, gameId);
@@ -903,6 +939,14 @@ bot.action(/play_(\d+)/, async (ctx) => {
         waitingRoom[cost] = { gameId: waitingGameId, players: [] };
     }
 
+    // በዳታቤዝ ላይ የጨዋታውን ሁኔታ መመዝገብ
+    await BingoGame.create({
+        gameId: waitingGameId,
+        cost: cost,
+        status: 'waiting',
+        players: []
+    });
+
     let keyboard = await getBingo1to75Keyboard(waitingRoom[cost].gameId);
     ctx.editMessageText(
         `🎯 **የቢንጎ ጨዋታ (ETB ${cost})**\n\nከዚህ በታች ካሉት ቁጥሮች ውስጥ የሚፈልጉትን አንድ ቁጥር ይምረጡ:`,
@@ -954,6 +998,12 @@ bot.action(/b_pick_(.+)_(\d+)/, async (ctx) => {
         let isFirstInRoom = waitingRoom[cost].players.length === 0;
 
         waitingRoom[cost].players.push({ userId, ctx, matrix, cost, pickedNum: dispNum, messageId: ctx.callbackQuery.message.message_id });
+
+        // በዳታቤዝ ጨዋታው ላይ ተጫዋቹን መመዝገብ
+        await BingoGame.findOneAndUpdate(
+            { gameId },
+            { $push: { players: userId } }
+        );
 
         let currentPlayersCount = waitingRoom[cost].players.length;
         let estimatedPool = cost * currentPlayersCount;
@@ -1009,6 +1059,9 @@ function runBingoQueue(cost, gameId) {
             clearInterval(countdownInterval);
 
             if (room.length < 2) {
+                // ጨዋታው በቂ ተጫዋች ስላላገኘ status-ውን cancelled ማድረግ
+                await BingoGame.findOneAndUpdate({ gameId }, { status: 'cancelled' });
+
                 for (let p of room) {
                     if (!isAdmin(p.userId)) {
                         let pUser = await getOrCreateUser(p.userId);
@@ -1028,6 +1081,9 @@ function runBingoQueue(cost, gameId) {
             }
 
             delete waitingRoom[cost];
+
+            // ጨዋታው በመጀመሩ status-ውን active ማድረግ
+            await BingoGame.findOneAndUpdate({ gameId }, { status: 'active' });
 
             let activeGameSessionId = 'active_' + Date.now() + '_' + cost;
             let roomPlayers = room.map(p => p.userId);
@@ -2006,12 +2062,10 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// 🎯 ቦቱ ሲነሳ ለሁሉም ተጫዋቾች ከታች Mini App Button መጨመሪያ
 bot.launch().then(() => {
     console.log('🤖 Telegram Bot is running...');
     
-    // ቦቱ ከታች የ Mini App Button እንዲኖረው የ Menu Button ማስተካከያ
-    const WEB_APP_URL = process.env.WEB_APP_URL || 'https://telegram-bot-xer2.onrender.com/miniapp'; // እዚህ ጋር የ Render URL-ዎን ማስገባት ይችላሉ
+    const WEB_APP_URL = process.env.WEB_APP_URL || 'https://telegram-bot-xer2.onrender.com/miniapp';
     bot.telegram.setChatMenuButton({
         menu_button: {
             type: 'web_app',
