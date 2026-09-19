@@ -302,13 +302,11 @@ app.get('/api/user/:userId', async (req, res) => {
 app.post('/api/bingo/timeout', async (req, res) => {
     try {
         const { userId, gameId } = req.body;
-        // 1. ጨዋታው በጊዜ ማለቁን እና ተጫዋች አለመኖሩን አረጋግጥ
         let game = await BingoGame.findOne({ gameId });
         if (game && game.status === 'waiting' && game.players.length < 2) {
             game.status = 'cancelled';
             await game.save();
 
-            // 2. ያስያዘውን ገንዘብ ለተጫዋቹ መለስ (Refund)
             let user = await User.findOne({ userId: Number(userId) });
             if (user) {
                 user.balance += game.cost;
@@ -365,7 +363,6 @@ app.post('/api/bingo/pick', async (req, res) => {
             fromMiniApp: true
         });
 
-        // በተጨማሪም BingoGame ዳታቤዝ ላይ መመዝገብ/ማዘመን
         await BingoGame.findOneAndUpdate(
             { gameId },
             { $set: { gameId, cost: Number(cost), status: 'waiting' }, $push: { players: Number(userId) } },
@@ -939,7 +936,6 @@ bot.action(/play_(\d+)/, async (ctx) => {
         waitingRoom[cost] = { gameId: waitingGameId, players: [] };
     }
 
-    // በዳታቤዝ ላይ የጨዋታውን ሁኔታ መመዝገብ
     await BingoGame.create({
         gameId: waitingGameId,
         cost: cost,
@@ -999,7 +995,6 @@ bot.action(/b_pick_(.+)_(\d+)/, async (ctx) => {
 
         waitingRoom[cost].players.push({ userId, ctx, matrix, cost, pickedNum: dispNum, messageId: ctx.callbackQuery.message.message_id });
 
-        // በዳታቤዝ ጨዋታው ላይ ተጫዋቹን መመዝገብ
         await BingoGame.findOneAndUpdate(
             { gameId },
             { $push: { players: userId } }
@@ -1059,7 +1054,6 @@ function runBingoQueue(cost, gameId) {
             clearInterval(countdownInterval);
 
             if (room.length < 2) {
-                // ጨዋታው በቂ ተጫዋች ስላላገኘ status-ውን cancelled ማድረግ
                 await BingoGame.findOneAndUpdate({ gameId }, { status: 'cancelled' });
 
                 for (let p of room) {
@@ -1082,7 +1076,6 @@ function runBingoQueue(cost, gameId) {
 
             delete waitingRoom[cost];
 
-            // ጨዋታው በመጀመሩ status-ውን active ማድረግ
             await BingoGame.findOneAndUpdate({ gameId }, { status: 'active' });
 
             let activeGameSessionId = 'active_' + Date.now() + '_' + cost;
