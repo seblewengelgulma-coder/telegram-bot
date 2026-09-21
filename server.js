@@ -53,7 +53,7 @@ const userSchema = new mongoose.Schema({
 });
 const User = mongoose.model('User', userSchema);
 
-// 🎯 የቢንጎ ጨዋታ ስኬማ (BingoGame Schema ለ /api/bingo/timeout አስፈላጊ የሆነው)
+// 🎯 የቢንጎ ጨዋታ ስኬማ (BingoGame Schema)
 const bingoGameSchema = new mongoose.Schema({
     gameId: { type: String, required: true, unique: true },
     cost: { type: Number, required: true },
@@ -298,7 +298,6 @@ app.get('/api/user/:userId', async (req, res) => {
     }
 });
 
-// 🎯 የተጠየቀው /api/bingo/timeout ማስተካከያ ኤንድፖይንት
 app.post('/api/bingo/timeout', async (req, res) => {
     try {
         const { userId, gameId } = req.body;
@@ -320,7 +319,6 @@ app.post('/api/bingo/timeout', async (req, res) => {
     }
 });
 
-// 🎯 Mini App Bingo Pick API Endpoint
 app.post('/api/bingo/pick', async (req, res) => {
     try {
         const { userId, cost, number } = req.body;
@@ -385,7 +383,6 @@ app.post('/api/bingo/pick', async (req, res) => {
     }
 });
 
-// 🎯 Bingo Status API Endpoint
 app.get('/api/bingo/status', async (req, res) => {
     try {
         const { userId, gameId } = req.query;
@@ -569,6 +566,7 @@ cron.schedule('0 0 * * 0', async () => {
 // --- 5. BINGO & KENO BOT HELPER FUNCTIONS ---
 
 function getKenoKeyboard(selectedNumbers = [], betAmount = 10) {
+    const WEB_APP_URL = process.env.WEB_APP_URL || 'https://telegram-bot-xer2.onrender.com/miniapp';
     let keyboard = [];
     let row = [];
     for (let i = 1; i <= 80; i++) {
@@ -581,6 +579,8 @@ function getKenoKeyboard(selectedNumbers = [], betAmount = 10) {
         }
     }
     keyboard.push([Markup.button.callback('📊 የሽልማት ሰንጠረዥ (Payout Table)', 'view_payout_table')]);
+    // 🎯 ኬኖ ሚኒ አፕ መክፈቻ በተን (ከቁጥር እና ከብር ምርጫ በኋላ የሚመታ)
+    keyboard.push([Markup.button.webApp('🚀 በ Mini App ኬኖ ጫወት', WEB_APP_URL)]);
     keyboard.push([Markup.button.callback('🎲 ኬኖ ጨዋታ ጀምር (Draw)', 'start_keno_draw')]);
     keyboard.push([Markup.button.callback('🔙 ወደ ዋናው ሜኑ', 'back_to_main_menu')]);
     return Markup.inlineKeyboard(keyboard);
@@ -627,6 +627,7 @@ function getFormattedBingoNumber(num) {
 }
 
 async function getBingo1to75Keyboard(gameId) {
+    const WEB_APP_URL = process.env.WEB_APP_URL || 'https://telegram-bot-xer2.onrender.com/miniapp';
     let keyboard = [];
     let row = [];
 
@@ -647,6 +648,8 @@ async function getBingo1to75Keyboard(gameId) {
             row = [];
         }
     }
+    // 🎯 የቢንጎ ሚኒ አፕ መክፈቻ በተን (ከብር እና ከቁጥር ምርጫ በታች የሚመታ)
+    keyboard.push([Markup.button.webApp('🚀 በ Mini App ቢንጎ ጫወት', WEB_APP_URL)]);
     keyboard.push([Markup.button.callback('🔙 ወደ ዋናው ሜኑ', 'back_to_main_menu')]);
     return Markup.inlineKeyboard(keyboard);
 }
@@ -945,7 +948,7 @@ bot.action(/play_(\d+)/, async (ctx) => {
 
     let keyboard = await getBingo1to75Keyboard(waitingRoom[cost].gameId);
     ctx.editMessageText(
-        `🎯 **የቢንጎ ጨዋታ (ETB ${cost})**\n\nከዚህ በታች ካሉት ቁጥሮች ውስጥ የሚፈልጉትን አንድ ቁጥር ይምረጡ:`,
+        `🎯 **የቢንጎ ጨዋታ (ETB ${cost})**\n\nከዚህ በታች ካሉት ቁጥሮች ውስጥ የሚፈልጉትን አንድ ቁጥር ይምረጡ ወይም ሚኒ አፕ በመጠቀም ይጫወቱ:`,
         keyboard
     );
 });
@@ -1129,26 +1132,28 @@ function runBingoQueue(cost, gameId) {
 
                 for (let pId of session.roomPlayers) {
                     let userGame = activeGames[pId];
-                    if (userGame && userGame.gameId === activeGameSessionId && userGame.messageId) {
-                        try {
-                            let messageText = 
-                                `🎲 <b>ጨዋታ በሂደት ላይ... (ETB ${session.cost})</b>\n` +
-                                `💰 አጠቃላይ ፖል: <b>ETB ${session.totalPool}</b> \vert{} ሽልማት: <b>ETB ${session.winnerReward}</b>\n\n` +
-                                `🔴 <b><u>አሁን የተጠራው ቁጥር፦</u></b>\n\n` +
-                                `📢 <b>[ ${formattedCurrent} ]</b> 📢\n\n` +
-                                `📜 <b>የወጡ ቁጥሮች ታሪክ:</b>\n[ ${formattedHist} ]`;
+                    if (userGame && userGame.gameId === activeGameSessionId) {
+                        if (userGame.messageId) {
+                            try {
+                                let messageText = 
+                                    `🎲 <b>ጨዋታ በሂደት ላይ... (ETB ${session.cost})</b>\n` +
+                                    `💰 አጠቃላይ ፖል: <b>ETB ${session.totalPool}</b> \vert{} ሽልማት: <b>ETB ${session.winnerReward}</b>\n\n` +
+                                    `🔴 <b><u>አሁን የተጠራው ቁጥር፦</u></b>\n\n` +
+                                    `📢 <b>[ ${formattedCurrent} ]</b> 📢\n\n` +
+                                    `📜 <b>የወጡ ቁጥሮች ታሪክ:</b>\n[ ${formattedHist} ]`;
 
-                            await bot.telegram.editMessageText(
-                                pId,
-                                userGame.messageId,
-                                undefined,
-                                messageText,
-                                {
-                                    parse_mode: 'HTML',
-                                    ...getBingoKeyboard(userGame.matrix)
-                                }
-                            );
-                        } catch (e) {}
+                                await bot.telegram.editMessageText(
+                                    pId,
+                                    userGame.messageId,
+                                    undefined,
+                                    messageText,
+                                    {
+                                        parse_mode: 'HTML',
+                                        ...getBingoKeyboard(userGame.matrix)
+                                    }
+                                );
+                            } catch (e) {}
+                        }
                     }
                 }
             }, 6000);
