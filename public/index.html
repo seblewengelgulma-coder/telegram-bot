@@ -453,12 +453,18 @@
     <div id="keno-payout-modal" class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="glass-card rounded-2xl max-w-xs w-full p-4 border border-pink-500/40 space-y-3">
             <div class="flex justify-between items-center border-b border-purple-800/60 pb-2">
-                <h3 class="font-bold text-sm text-pink-400">📊 የኬኖ ሽልማት ሰንጠረዥ (Payouts)</h3>
+                <h3 class="font-bold text-sm text-pink-400">📊 የኬኖ ሽልማት እና ደንቦች</h3>
                 <button onclick="toggleKenoPayoutModal(false)" class="text-gray-400 hover:text-white">
                     <i class="fa-solid fa-xmark text-lg"></i>
                 </button>
             </div>
             <div class="text-xs space-y-1.5 text-gray-200 max-h-60 overflow-y-auto pr-1">
+                <div class="py-1 border-b border-purple-900/40 text-amber-300 font-semibold">📌 ልዩ የሪፈንድ ደንቦች:</div>
+                <div class="flex justify-between py-1 border-b border-purple-900/40"><span>2 ቁጥር ተመርጦ 1 ሲደርስ:</span><b class="text-emerald-400">ቁማሩ ይመለሳል (1.0x)</b></div>
+                <div class="flex justify-between py-1 border-b border-purple-900/40"><span>3 ቁጥር ተመርጦ 2 ሲደርስ:</span><b class="text-emerald-400">በማባዣ ይመለሳል (1.5x)</b></div>
+                <div class="flex justify-between py-1 border-b border-purple-900/40"><span>4 ቁጥር ተመርጦ 2 ሲደርስ:</span><b class="text-emerald-400">ቁማሩ ይመለሳል (1.0x)</b></div>
+                
+                <div class="py-1 pt-2 border-t border-purple-900/40 text-amber-300 font-semibold">📊 መደበኛ ማባዣዎች (Multiplier):</div>
                 <div class="flex justify-between py-1 border-b border-purple-900/40"><span>10 ቁጥር ተመርጦ:</span><b class="text-amber-400">20.0x</b></div>
                 <div class="flex justify-between py-1 border-b border-purple-900/40"><span>9 ቁጥር ተመርጦ:</span><b class="text-amber-400">10.0x</b></div>
                 <div class="flex justify-between py-1 border-b border-purple-900/40"><span>8 ቁጥር ተመርጦ:</span><b class="text-amber-400">6.0x</b></div>
@@ -680,7 +686,6 @@
             document.getElementById('bingo-pick-section').classList.add('hidden');
             document.getElementById('bingo-bet-selector').classList.add('hidden');
             
-            // Start Waiting Room Timer
             const waitingCard = document.getElementById('bingo-waiting-card');
             waitingCard.classList.remove('hidden');
 
@@ -971,7 +976,7 @@
                     clearInterval(drawInterval);
                     finishKenoRound(hits, drawn20);
                 }
-            }, 250);
+            }, 3000); // በየ 3 ሰከንዱ እንዲወጣ ተደርጓል
         }
 
         function finishKenoRound(hits, drawn20) {
@@ -981,6 +986,7 @@
             let count = kenoState.selectedNumbers.length;
             let winAmount = 0;
 
+            // ሙሉ ትክክለኛ ግጥሚያዎች (Standard Payouts)
             if (hits === count) {
                 let mult = 0;
                 if (count === 10) mult = 20;
@@ -995,8 +1001,16 @@
                 else if (count === 1) mult = 0.5;
 
                 winAmount = Math.round(kenoState.betCost + (kenoState.betCost * mult));
-            } else if (count === 2 && hits === 1) {
-                winAmount = kenoState.betCost;
+            } 
+            // የተጠቃሚው ልዩ የሪፈንድ/ከፊል አሸናፊነት ደንቦች
+            else if (count === 2 && hits === 1) {
+                winAmount = kenoState.betCost; // 2 ቁጥር ተመርጦ 1 ሲደርስ ያስያዘው ይመለሳል
+            } 
+            else if (count === 3 && hits === 2) {
+                winAmount = Math.round(kenoState.betCost * 1.5); // 3 ቁጥር ተመርጦ 2 ሲደርስ በ 1.5x ማባዣ ይመለሳል
+            } 
+            else if (count === 4 && hits === 2) {
+                winAmount = kenoState.betCost; // 4 ቁጥር ተመርጦ 2 ሲደርስ ያስያዘው ይመለሳል
             }
 
             if (winAmount > 0) {
@@ -1033,23 +1047,84 @@
         function handleDepositSubmit(e) {
             e.preventDefault();
             const amount = document.getElementById('deposit-amount').value;
-            showToast(`⏳ የ ${amount} ETB የዲፖዚት ጥያቄ ለአድሚን ተልኳል!`, 'fa-clock');
-            document.getElementById('deposit-form').reset();
-            document.getElementById('deposit-img-preview').classList.add('hidden');
-            document.getElementById('deposit-file-label').innerText = 'ስክሪንሾት ፎቶ ለመምረጥ እዚህ ይጫኑ';
+            
+            if (!amount || amount <= 0) {
+                showToast('❌ እባክዎ ትክክለኛ የብር መጠን ያስገቡ!', 'fa-triangle-exclamation');
+                return;
+            }
+
+            showToast(`⏳ የ ${amount} ETB የዲፖዚት ጥያቄ በመላክ ላይ ነው...`, 'fa-clock');
+
+            fetch('/api/deposit', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Telegram-Init-Data': tg?.initData || ''
+                },
+                body: JSON.stringify({
+                    userId: currentUser.userId,
+                    amount: Number(amount),
+                    photoId: null
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast(`✅ የ ${amount} ETB የዲፖዚት ጥያቄዎ ለአድሚን ተልኳል!`, 'fa-circle-check');
+                    document.getElementById('deposit-form').reset();
+                    document.getElementById('deposit-img-preview').classList.add('hidden');
+                    document.getElementById('deposit-file-label').innerText = 'ስክሪንሾት ፎቶ ለመምረጥ እዚህ ይጫኑ';
+                } else {
+                    showToast(`❌ ስህተት: ${data.message || 'ጥያቄውን መላክ አልተቻለም'}`, 'fa-triangle-exclamation');
+                }
+            })
+            .catch(error => {
+                console.error('Deposit Network Error:', error);
+                showToast('❌ የኔትወርክ ስህተት አጋጥሟል!', 'fa-triangle-exclamation');
+            });
         }
 
         function handleWithdrawSubmit(e) {
             e.preventDefault();
             const amount = parseFloat(document.getElementById('withdraw-amount').value);
+            
+            if (!amount || amount <= 0) {
+                showToast('❌ እባክዎ ትክክለኛ መጠን ያስገቡ!', 'fa-triangle-exclamation');
+                return;
+            }
+
             if (amount > currentUser.balance) {
                 showToast('❌ በቂ ባላንስ የለዎትም!', 'fa-triangle-exclamation');
                 return;
             }
-            currentUser.balance -= amount;
-            updateUserUi();
-            showToast(`✅ የ ${amount} ETB የዊዝድሮ ጥያቄ በተሳካ ሁኔታ ቀርቧል!`, 'fa-circle-check');
-            document.getElementById('withdraw-form').reset();
+
+            showToast(`⏳ የ ${amount} ETB የዊዝድሮ ጥያቄ በመላክ ላይ ነው...`, 'fa-clock');
+
+            fetch('/api/withdraw', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Telegram-Init-Data': tg?.initData || ''
+                },
+                body: JSON.stringify({
+                    userId: currentUser.userId,
+                    amount: amount,
+                    phone: currentUser.phone
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast(`✅ የ ${amount} ETB የዊዝድሮ ጥያቄዎ ለአድሚን ተልኳል! አድሚኑ እስኪያጸድቀው ይጠብቁ።`, 'fa-circle-check');
+                    document.getElementById('withdraw-form').reset();
+                } else {
+                    showToast(`❌ ስህተት: ${data.message || 'ጥያቄውን መላክ አልተቻለም'}`, 'fa-triangle-exclamation');
+                }
+            })
+            .catch(error => {
+                console.error('Withdraw Network Error:', error);
+                showToast('❌ የኔትወርክ ስህተት አጋጥሟል!', 'fa-triangle-exclamation');
+            });
         }
 
         function handleSupportSubmit(e) {

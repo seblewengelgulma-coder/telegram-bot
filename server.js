@@ -579,7 +579,6 @@ function getKenoKeyboard(selectedNumbers = [], betAmount = 10) {
         }
     }
     keyboard.push([Markup.button.callback('📊 የሽልማት ሰንጠረዥ (Payout Table)', 'view_payout_table')]);
-    // 🎯 ኬኖ ሚኒ አፕ መክፈቻ በተን (ከቁጥር እና ከብር ምርጫ በኋላ የሚመታ)
     keyboard.push([Markup.button.webApp('🚀 በ Mini App ኬኖ ጫወት', WEB_APP_URL)]);
     keyboard.push([Markup.button.callback('🎲 ኬኖ ጨዋታ ጀምር (Draw)', 'start_keno_draw')]);
     keyboard.push([Markup.button.callback('🔙 ወደ ዋናው ሜኑ', 'back_to_main_menu')]);
@@ -648,7 +647,6 @@ async function getBingo1to75Keyboard(gameId) {
             row = [];
         }
     }
-    // 🎯 የቢንጎ ሚኒ አፕ መክፈቻ በተን (ከብር እና ከቁጥር ምርጫ በታች የሚመታ)
     keyboard.push([Markup.button.webApp('🚀 በ Mini App ቢንጎ ጫወት', WEB_APP_URL)]);
     keyboard.push([Markup.button.callback('🔙 ወደ ዋናው ሜኑ', 'back_to_main_menu')]);
     return Markup.inlineKeyboard(keyboard);
