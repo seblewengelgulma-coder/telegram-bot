@@ -549,9 +549,13 @@
             isDrawing: false
         };
 
+        // Socket Connection Setup
+        let socket = null;
+
         // Initialize App on DOM Load
         window.addEventListener('DOMContentLoaded', () => {
             initTelegramSdk();
+            initSocketListeners();
             buildBingo1to75Picker();
             buildKeno80Grid();
             renderLeaderboard();
@@ -595,6 +599,42 @@
             } else {
                 updateUserUi();
             }
+        }
+
+        /* --- SOCKET LISTENERS (CORRECTLY PLACED OUTSIDE FUNCTIONS) --- */
+        function initSocketListeners() {
+            socket = io(); // Connect to Socket.io server
+
+            // 1. ሰርቨሩ የሚልከውን የቆጣሪ ጊዜ መቀበል እና ማሳየት
+            socket.on('update_timer', (countdownTime) => {
+                const timerSpan = document.getElementById('bingo-waiting-timer');
+                if (timerSpan) {
+                    timerSpan.innerHTML = `⏱ የቀረው ጊዜ: <span class="font-bold text-amber-400 text-sm">${countdownTime}</span> ሰከንድ`;
+                }
+            });
+
+            // 2. ተጫዋቾች ከ 2 በታች ሲሆኑ ሰርቨሩ ጨዋታውን ሲሰርዝ
+            socket.on('cancel_game', (data) => {
+                if (bingoState && bingoState.timerInterval) {
+                    clearInterval(bingoState.timerInterval);
+                }
+                
+                document.getElementById('bingo-waiting-card').classList.add('hidden');
+                document.getElementById('bingo-pick-section').classList.remove('hidden');
+                document.getElementById('bingo-bet-selector').classList.remove('hidden');
+                
+                showToast(`❌ ${data.message}`, 'fa-triangle-exclamation');
+            });
+
+            // 3. ሰርቨሩ ጨዋታው በቂ ተጫዋቾች አግኝቶ ሲጀምር
+            socket.on('start_game', (gameData) => {
+                if (bingoState && bingoState.timerInterval) {
+                    clearInterval(bingoState.timerInterval);
+                }
+                
+                document.getElementById('bingo-waiting-card').classList.add('hidden');
+                startLiveBingoGame(gameData);
+            });
         }
 
         /* --- UI HELPERS & NAVIGATION --- */
@@ -689,44 +729,18 @@
             
             const waitingCard = document.getElementById('bingo-waiting-card');
             waitingCard.classList.remove('hidden');
-             // 💡 ቁጥሩን እና የውርርድ መጠን ወደ ባክ-ኢንድ ሰርቨር መላክ
-    socket.emit('join_bingo_room', {
-        userId: currentUser.userId,
-        userName: currentUser.userName,
-        betCost: bingoState.betCost,
-        initialNum: num
-    });
-             // 1. ሰርቨሩ የሚልከውን የቆጣሪ ጊዜ መቀበል እና ማሳየት
-socket.on('update_timer', (countdownTime) => {
-    const timerSpan = document.getElementById('bingo-waiting-timer');
-    if (timerSpan) {
-        timerSpan.innerHTML = `⏱ የቀረው ጊዜ: <span class="font-bold text-amber-400 text-sm">${countdownTime}</span> ሰከንድ`;
-    }
-});
 
-// 2. ተጫዋቾች ከ 2 በታች ሲሆኑ ሰርቨሩ ጨዋታውን ሲሰርዝ
-socket.on('cancel_game', (data) => {
-    // ካለ የቆጣሪ ክትትል ማቆም (Clear interval if active)
-    if (window.bingoState && window.bingoState.timerInterval) {
-        clearInterval(window.bingoState.timerInterval);
-    }
-    
-    document.getElementById('bingo-waiting-card').classList.add('hidden');
-    document.getElementById('bingo-pick-section').classList.remove('hidden');
-    document.getElementById('bingo-bet-selector').classList.remove('hidden');
-    
-    showToast(`❌ ${data.message}`, 'fa-triangle-exclamation');
-});
+            // ቁጥሩን እና የውርርድ መጠን ወደ ባክ-ኢንድ ሰርቨር መላክ
+            if (socket) {
+                socket.emit('join_bingo_room', {
+                    userId: currentUser.userId,
+                    userName: currentUser.userName,
+                    betCost: bingoState.betCost,
+                    initialNum: num
+                });
+            }
+        }
 
-// 3. ሰርቨሩ ጨዋታው በቂ ተጫዋቾች አግኝቶ ሲጀምር
-socket.on('start_game', (gameData) => {
-    if (window.bingoState && window.bingoState.timerInterval) {
-        clearInterval(window.bingoState.timerInterval);
-    }
-    
-    document.getElementById('bingo-waiting-card').classList.add('hidden');
-    startLiveBingoGame(gameData);
-});
         function generateRandomBingoCard() {
             let colRanges = [
                 { min: 1, max: 15 }, { min: 16, max: 30 },
@@ -758,7 +772,7 @@ socket.on('start_game', (gameData) => {
             return matrix;
         }
 
-        function startLiveBingoGame() {
+        function startLiveBingoGame(gameData) {
             bingoState.isPlaying = true;
             bingoState.matrix = generateRandomBingoCard();
             bingoState.drawnNumbers = [];
@@ -838,26 +852,26 @@ socket.on('start_game', (gameData) => {
         }
 
         function claimBingo() {
-    if (checkBingoWin()) {
-        clearInterval(bingoState.drawInterval);
-        let reward = Math.round((bingoState.betCost * 2) * 0.9);
-        
-        // ውጤቱን ለባክ-ኤንድ ሰርቨር ማሳወቅ
-        fetch('/api/bingo/win', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: currentUser.userId, reward: reward })
-        }).then(res => res.json()).then(data => {
-            if(data.success) {
-                currentUser.balance += reward;
-                updateUserUi();
-                showToast(`🎉 እንኳን ደስ አሎት ${reward} ETB አሸንፈዋል!`, 'fa-trophy');
+            if (checkBingoWin()) {
+                if (bingoState.drawInterval) clearInterval(bingoState.drawInterval);
+                let reward = Math.round((bingoState.betCost * 2) * 0.9);
+                
+                // ውጤቱን ለባክ-ኤንድ ሰርቨር ማሳወቅ
+                fetch('/api/bingo/win', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: currentUser.userId, reward: reward })
+                }).then(res => res.json()).then(data => {
+                    if(data.success) {
+                        currentUser.balance += reward;
+                        updateUserUi();
+                        showToast(`🎉 እንኳን ደስ አሎት ${reward} ETB አሸንፈዋል!`, 'fa-trophy');
+                    }
+                });
+            } else {
+                showToast('❌ ገና ቢንጎ አልሞሉም!', 'fa-triangle-exclamation');
             }
-        });
-    } else {
-        showToast('❌ ገና ቢንጎ አልሞሉም!', 'fa-triangle-exclamation');
-    }
-}
+        }
 
         function resetBingoUi() {
             bingoState.isPlaying = false;
@@ -1003,7 +1017,7 @@ socket.on('start_game', (gameData) => {
                     clearInterval(drawInterval);
                     finishKenoRound(hits, drawn20);
                 }
-            }, 3000); // በየ 3 ሰከንዱ እንዲወጣ ተደርጓል
+            }, 3000);
         }
 
         function finishKenoRound(hits, drawn20) {
@@ -1013,7 +1027,6 @@ socket.on('start_game', (gameData) => {
             let count = kenoState.selectedNumbers.length;
             let winAmount = 0;
 
-            // ሙሉ ትክክለኛ ግጥሚያዎች (Standard Payouts)
             if (hits === count) {
                 let mult = 0;
                 if (count === 10) mult = 20;
@@ -1029,15 +1042,14 @@ socket.on('start_game', (gameData) => {
 
                 winAmount = Math.round(kenoState.betCost + (kenoState.betCost * mult));
             } 
-            // የተጠቃሚው ልዩ የሪፈንድ/ከፊል አሸናፊነት ደንቦች
             else if (count === 2 && hits === 1) {
-                winAmount = kenoState.betCost; // 2 ቁጥር ተመርጦ 1 ሲደርስ ያስያዘው ይመለሳል
+                winAmount = kenoState.betCost;
             } 
             else if (count === 3 && hits === 2) {
-                winAmount = Math.round(kenoState.betCost * 1.5); // 3 ቁጥር ተመርጦ 2 ሲደርስ በ 1.5x ማባዣ ይመለሳል
+                winAmount = Math.round(kenoState.betCost * 1.5);
             } 
             else if (count === 4 && hits === 2) {
-                winAmount = kenoState.betCost; // 4 ቁጥር ተመርጦ 2 ሲደርስ ያስያዘው ይመለሳል
+                winAmount = kenoState.betCost;
             }
 
             if (winAmount > 0) {
