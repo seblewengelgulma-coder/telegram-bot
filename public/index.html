@@ -16,7 +16,8 @@
     
     <!-- Google Fonts (Inter) -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-
+     <!-- Socket.io Client Library (ለሪል-ታይም ሲንክሮናይዜሽን የተጨመረ) -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -688,8 +689,16 @@
             
             const waitingCard = document.getElementById('bingo-waiting-card');
             waitingCard.classList.remove('hidden');
+             // 💡 ቁጥሩን እና የውርርድ መጠን ወደ ባክ-ኢንድ ሰርቨር መላክ
+    socket.emit('join_bingo_room', {
+        userId: currentUser.userId,
+        userName: currentUser.userName,
+        betCost: bingoState.betCost,
+        initialNum: num
+    });
 
-            let countdown = 5;
+            
+            let countdown = 30;
             const timerSpan = document.getElementById('bingo-waiting-timer');
             
             bingoState.timerInterval = setInterval(() => {
@@ -815,22 +824,26 @@
         }
 
         function claimBingo() {
-            if (checkBingoWin()) {
-                clearInterval(bingoState.drawInterval);
-                let reward = Math.round((bingoState.betCost * 2) * 0.9);
+    if (checkBingoWin()) {
+        clearInterval(bingoState.drawInterval);
+        let reward = Math.round((bingoState.betCost * 2) * 0.9);
+        
+        // ውጤቱን ለባክ-ኤንድ ሰርቨር ማሳወቅ
+        fetch('/api/bingo/win', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUser.userId, reward: reward })
+        }).then(res => res.json()).then(data => {
+            if(data.success) {
                 currentUser.balance += reward;
-                currentUser.dailyWins += 1;
                 updateUserUi();
-
-                showToast(`🎉 BINGO! እንኳን ደስ አሎት ${reward} ETB አሸንፈዋል!`, 'fa-trophy');
-                
-                setTimeout(() => {
-                    resetBingoUi();
-                }, 4000);
-            } else {
-                showToast('❌ ገና ቢንጎ አልሞሉም! እባክዎ ካርድዎን በጥንቃቄ ይፈትሹ።', 'fa-triangle-exclamation');
+                showToast(`🎉 እንኳን ደስ አሎት ${reward} ETB አሸንፈዋል!`, 'fa-trophy');
             }
-        }
+        });
+    } else {
+        showToast('❌ ገና ቢንጎ አልሞሉም!', 'fa-triangle-exclamation');
+    }
+}
 
         function resetBingoUi() {
             bingoState.isPlaying = false;

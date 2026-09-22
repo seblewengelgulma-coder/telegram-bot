@@ -8,6 +8,8 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+// ከባክ-ኢንድ ሰርቨር ጋር መገናኘት (ሰርቨርዎ የሚገኝበትን አድራሻ ያስገቡ)
+const socket = io('https://telegram-bot-xer2.onrender.com/');
 
 // --- 🌐 Express CORS & Body Middlewares ---
 app.use(cors({
@@ -1620,12 +1622,14 @@ bot.hears('📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', async (ctx) => {
     if (!isAdmin(ctx.from.id)) return;
     
     let filter = {};
-    if (!isOwner(ctx.from.id)) {
+    // ሱፐር አድሚን (Owner) ካልሆነ በስተቀር የራሱን ጥያቄዎች ብቻ ያጣራል፤ 
+    // ሱፐር አድሚን ከሆኑ ግን (filter = {}) ሆኖ የሁሉንም አድሚኖች ጥያቄ ያመጣል።
+    if (ctx.from.id !== OWNER_ID) {
         filter = { assignedAdminId: ctx.from.id };
     }
 
     let reqs = await RequestModel.find(filter);
-    if (reqs.length === 0) return ctx.reply('📭 ምንም የሚጠብቅ ጥያቄ የለም።', adminKeyboard);
+    if (reqs.length ===_0 || reqs.length === 0) return ctx.reply('📭 ምንም የሚጠብቅ ጥያቄ የለም።', adminKeyboard);
     
     for (let r of reqs) {
         let msg = `📌 **አይነት:** ${r.type.toUpperCase()}\n👤 **ስም:** ${r.userName} (ID: \`${r.userId}\`)\n💰 **መጠን:** ETB ${r.amount}\n📱 **አካውንት:** \`${r.details}\``;
@@ -2055,6 +2059,11 @@ bot.on('text', async (ctx) => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// 🛠️ ይሄንን አዲስ ሮት ጨምር (ይህም /miniapp የሚለውን ስህተት ያስወግዳል)
+app.get('/miniapp', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
