@@ -1628,21 +1628,21 @@ bot.hears('📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', async (ctx) => {
         filter = { assignedAdminId: ctx.from.id };
     }
 
-    let reqs = await RequestModel.find(filter);
-    if (reqs.length ===_0 || reqs.length === 0) return ctx.reply('📭 ምንም የሚጠብቅ ጥያቄ የለም።', adminKeyboard);
+   let reqs = await RequestModel.find(filter);
+if (reqs.length === 0) return ctx.reply('📭 ምንም የሚጠብቅ ጥያቄ የለም።', adminKeyboard);
+
+for (let r of reqs) {
+    let msg = `📌 **አይነት:** ${r.type.toUpperCase()}\n👤 **ስም:** ${r.userName} (ID: \`${r.userId}\`)\n💰 **መጠን:** ETB ${r.amount}\n📱 **አካውንት:** \`${r.details}\``;
+    let keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('✅ አጽድቅ', `approve_req_${r._id}`), Markup.button.callback('❌ ውድቅ አድርግ', `reject_req_${r._id}`)]
+    ]);
     
-    for (let r of reqs) {
-        let msg = `📌 **አይነት:** ${r.type.toUpperCase()}\n👤 **ስም:** ${r.userName} (ID: \`${r.userId}\`)\n💰 **መጠን:** ETB ${r.amount}\n📱 **አካውንት:** \`${r.details}\``;
-        let keyboard = Markup.inlineKeyboard([
-            [Markup.button.callback('✅ አጽድቅ', `approve_req_${r._id}`), Markup.button.callback('❌ ውድቅ አድርግ', `reject_req_${r._id}`)]
-        ]);
-        if (r.photoId) {
-            await ctx.replyWithPhoto(r.photoId, { caption: msg, parse_mode: 'Markdown', ...keyboard });
-        } else {
-            await ctx.reply(msg, { parse_mode: 'Markdown', ...keyboard });
-        }
+    if (r.photoId) {
+        await ctx.replyWithPhoto(r.photoId, { caption: msg, parse_mode: 'Markdown', ...keyboard });
+    } else {
+        await ctx.reply(msg, { parse_mode: 'Markdown', ...keyboard });
     }
-});
+}
 
 bot.hears('💬 የተጫዋቾች ኮሜንቶች', async (ctx) => {
     if (!isAdmin(ctx.from.id)) return;
