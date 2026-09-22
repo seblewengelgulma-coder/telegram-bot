@@ -437,13 +437,22 @@ app.post('/api/deposit', async (req, res) => {
         });
         await newReq.save();
 
-        bot.telegram.sendMessage(assignedAdminId, 
-            `📥 **አዲስ የዲፖዚት ጥያቄ (ከMini App)!**\n\n👤 **ስም:** ${user.userName} (ID: \`${userId}\`)\n💰 **መጠን:** ETB ${amount}`,
-            { parse_mode: 'Markdown' }
-        ).catch(() => {});
+        // ፎቶውን ጨምሮ ለአድሚን ለመላክ (photoId ካለ)
+        if (photoId) {
+            await bot.telegram.sendPhoto(assignedAdminId, photoId, {
+                caption: `📥 **አዲስ የዲፖዚት ጥያቄ (ከMini App)!**\n\n👤 **ስም:** ${user.userName} (ID: \`${userId}\`)\n💰 **መጠን:** ETB ${amount}`,
+                parse_mode: 'Markdown'
+            }).catch((e) => console.log('Admin photo send error:', e));
+        } else {
+            await bot.telegram.sendMessage(assignedAdminId, 
+                `📥 **አዲስ የዲፖዚት ጥያቄ (ከMini App)!**\n\n👤 **ስም:** ${user.userName} (ID: \`${userId}\`)\n💰 **መጠን:** ETB ${amount}`,
+                { parse_mode: 'Markdown' }
+            ).catch(() => {});
+        }
 
         res.json({ success: true, message: 'ጥያቄዎ ለአድሚን ተልኳል' });
     } catch (err) {
+        console.error('Deposit Error:', err);
         res.status(500).json({ success: false, error: err.message });
     }
 });

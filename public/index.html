@@ -696,23 +696,37 @@
         betCost: bingoState.betCost,
         initialNum: num
     });
+             // 1. ሰርቨሩ የሚልከውን የቆጣሪ ጊዜ መቀበል እና ማሳየት
+socket.on('update_timer', (countdownTime) => {
+    const timerSpan = document.getElementById('bingo-waiting-timer');
+    if (timerSpan) {
+        timerSpan.innerHTML = `⏱ የቀረው ጊዜ: <span class="font-bold text-amber-400 text-sm">${countdownTime}</span> ሰከንድ`;
+    }
+});
 
-            
-            let countdown = 30;
-            const timerSpan = document.getElementById('bingo-waiting-timer');
-            
-            bingoState.timerInterval = setInterval(() => {
-                countdown--;
-                timerSpan.innerHTML = `⏱ የቀረው ጊዜ: <span class="font-bold text-amber-400 text-sm">${countdown}</span> ሰከንድ`;
-                
-                if (countdown <= 0) {
-                    clearInterval(bingoState.timerInterval);
-                    waitingCard.classList.add('hidden');
-                    startLiveBingoGame();
-                }
-            }, 1000);
-        }
+// 2. ተጫዋቾች ከ 2 በታች ሲሆኑ ሰርቨሩ ጨዋታውን ሲሰርዝ
+socket.on('cancel_game', (data) => {
+    // ካለ የቆጣሪ ክትትል ማቆም (Clear interval if active)
+    if (window.bingoState && window.bingoState.timerInterval) {
+        clearInterval(window.bingoState.timerInterval);
+    }
+    
+    document.getElementById('bingo-waiting-card').classList.add('hidden');
+    document.getElementById('bingo-pick-section').classList.remove('hidden');
+    document.getElementById('bingo-bet-selector').classList.remove('hidden');
+    
+    showToast(`❌ ${data.message}`, 'fa-triangle-exclamation');
+});
 
+// 3. ሰርቨሩ ጨዋታው በቂ ተጫዋቾች አግኝቶ ሲጀምር
+socket.on('start_game', (gameData) => {
+    if (window.bingoState && window.bingoState.timerInterval) {
+        clearInterval(window.bingoState.timerInterval);
+    }
+    
+    document.getElementById('bingo-waiting-card').classList.add('hidden');
+    startLiveBingoGame(gameData);
+});
         function generateRandomBingoCard() {
             let colRanges = [
                 { min: 1, max: 15 }, { min: 16, max: 30 },
