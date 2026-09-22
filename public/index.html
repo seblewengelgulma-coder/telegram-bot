@@ -97,23 +97,6 @@
             box-shadow: 0 0 12px rgba(236, 72, 153, 0.6);
             transform: scale(1.05);
         }
-        .keno-num-btn.drawn-hit {
-            background: linear-gradient(135deg, #10b981, #059669) !important;
-            color: #fff !important;
-            border-color: #34d399 !important;
-            box-shadow: 0 0 12px rgba(16, 185, 129, 0.8);
-            animation: pulse-hit 0.6s ease infinite alternate;
-        }
-        .keno-num-btn.drawn-miss {
-            background: rgba(239, 68, 68, 0.2) !important;
-            border-color: rgba(239, 68, 68, 0.4) !important;
-            color: #fca5a5 !important;
-        }
-
-        @keyframes pulse-hit {
-            0% { transform: scale(1); }
-            100% { transform: scale(1.1); }
-        }
 
         .ball-pop {
             animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -283,7 +266,7 @@
                     <button onclick="switchWalletTab('withdraw')" id="tab-withdraw-btn" class="flex-1 pb-2 text-xs font-bold text-gray-400">ዊዝድሮ (Withdraw)</button>
                 </div>
 
-                <!-- Deposit Form -->
+                <!-- Deposit Form (በትራንዛክሽን መረጃ/ሊንክ) -->
                 <div id="wallet-deposit-pane" class="space-y-3">
                     <div class="bg-purple-950/60 p-3 rounded-xl border border-purple-900 text-xs space-y-1">
                         <div class="font-bold text-amber-400">🏦 የባንክ እና ቴሌብር ቁጥሮች:</div>
@@ -291,25 +274,25 @@
                         <div>• ቴሌብር (Telebirr): <b>0929441620</b> (ቴዎድሮስ)</div>
                     </div>
                     <div>
-                        <label class="text-xs text-gray-400">የሚያስገቡት መጠን (ETB):</label>
+                        <label class="text-xs text-gray-400">የሚያስገቡት የብር መጠን (ETB):</label>
                         <input type="number" id="deposit-amount-input" placeholder="ለምሳሌ: 100" class="w-full mt-1 bg-purple-950/80 border border-purple-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-400">
                     </div>
                     <div>
-                        <label class="text-xs text-gray-400">የክፍያ ስክሪንሾት (Screenshot ፎቶ):</label>
-                        <input type="file" id="deposit-file-input" accept="image/*" class="w-full mt-1 text-xs text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-purple-850 file:text-amber-400 hover:file:bg-purple-750">
+                        <label class="text-xs text-gray-400">የትራንዛክሽን ሜሴጅ ወይም ሊንክ (Transaction Info):</label>
+                        <textarea id="deposit-tx-input" rows="3" placeholder="የባንክ ወይም የቴሌብር ትራንዛክሽን ቴክስት እዚህ ፔስት (Paste) ያድርጉ..." class="w-full mt-1 bg-purple-950/80 border border-purple-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-400"></textarea>
                     </div>
                     <button onclick="submitDeposit()" class="w-full btn-neon-gold py-3 rounded-xl text-sm">የዲፖዚት ጥያቄ ላክ</button>
                 </div>
 
-                <!-- Withdraw Form -->
+                <!-- Withdraw Form (ስልክ ቁጥር አውቶማቲክ ከፕሮፋይል/ዳታቤዝ የሚወሰድ) -->
                 <div id="wallet-withdraw-pane" class="hidden space-y-3">
-                    <div>
-                        <label class="text-xs text-gray-400">ማውጣት የሚፈልጉት መጠን (ETB):</label>
-                        <input type="number" id="withdraw-amount-input" placeholder="ለምሳሌ: 200" class="w-full mt-1 bg-purple-950/80 border border-purple-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-400">
+                    <div class="bg-purple-950/60 p-3 rounded-xl border border-purple-900 text-xs space-y-1">
+                        <div class="text-purple-300">📱 መቀበያ ስልክ ቁጥር:</div>
+                        <div class="font-bold text-white text-sm" id="withdraw-user-phone">በቦቱ ላይ የተመዘገበው ቁጥር ይጠቀማል</div>
                     </div>
                     <div>
-                        <label class="text-xs text-gray-400">ስልክ ቁጥር (ቴሌብር / CBE Birr):</label>
-                        <input type="text" id="withdraw-phone-input" placeholder="09xxxxxxxx" class="w-full mt-1 bg-purple-950/80 border border-purple-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-400">
+                        <label class="text-xs text-gray-400">ማውጣት የሚፈልጉት የብር መጠን (ETB):</label>
+                        <input type="number" id="withdraw-amount-input" placeholder="ለምሳሌ: 200" class="w-full mt-1 bg-purple-950/80 border border-purple-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-400">
                     </div>
                     <button onclick="submitWithdraw()" class="w-full btn-neon-purple py-3 rounded-xl text-sm font-bold text-white">የዊዝድሮ ጥያቄ ላክ</button>
                 </div>
@@ -336,6 +319,10 @@
                     <div class="flex justify-between">
                         <span class="text-gray-400">ቴሌግራም ID:</span>
                         <span id="prof-telegram-id" class="font-mono text-purple-300">-</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">ስልክ ቁጥር:</span>
+                        <span id="prof-phone" class="font-bold text-amber-400">-</span>
                     </div>
                     <div class="flex justify-between">
                         <span class="text-gray-400">የአሁኑ ሌቭል:</span>
@@ -402,6 +389,7 @@
         let currentUser = {
             telegramId: tg?.initDataUnsafe?.user?.id || 123456789,
             userName: tg?.initDataUnsafe?.user?.first_name || 'ተጫዋች',
+            phone: '',
             balance: 0,
             dailyWins: 0,
             level: 1,
@@ -444,6 +432,8 @@
             document.getElementById('user-balance-display').innerText = `${Number(currentUser.balance || 0).toFixed(2)} ETB`;
             
             document.getElementById('prof-telegram-id').innerText = currentUser.telegramId;
+            document.getElementById('prof-phone').innerText = currentUser.phone || 'አልተመዘገበም';
+            document.getElementById('withdraw-user-phone').innerText = currentUser.phone || 'ስልክ ቁጥር አልተገኘም (ቦቱ ላይ Share Contact ያድርጉ)';
             document.getElementById('prof-level').innerText = currentUser.level || 1;
             document.getElementById('prof-total-games').innerText = currentUser.totalGames || 0;
             document.getElementById('prof-wins').innerText = currentUser.wins || 0;
@@ -604,16 +594,17 @@
         }
 
         function initKenoGrid() {
-            let grid = document.getElementById('keno-80-grid');
-            grid.innerHTML = '';
-            for (let i = 1; i <= 80; i++) {
-                let btn = document.createElement('button');
-                btn.className = 'keno-num-btn glass-card rounded-lg text-gray-200 border border-purple-900';
-                btn.innerText = i;
-                btn.onclick = () => toggleKenoNum(i, btn);
-                grid.appendChild(btn);
-            }
-        }
+    let grid = document.getElementById('keno-80-grid');
+    grid.innerHTML = '';
+    for (let i = 1; i <= 80; i++) {
+        let btn = document.createElement('button');
+        btn.className = 'keno-num-btn glass-card rounded-lg text-gray-200 border border-purple-900';
+        btn.innerText = i;
+        btn.id = `keno-btn-${i}`; // <--- እያንዳንዱን ቁልፍ በ ID መለየት እንድንችል ጨምረናል
+        btn.onclick = () => toggleKenoNum(i, btn);
+        grid.appendChild(btn);
+    }
+}
 
         function toggleKenoNum(num, btn) {
             let idx = kenoSelectedNumbers.indexOf(num);
@@ -638,34 +629,73 @@
         }
 
         async function startKenoDraw() {
-            if (kenoSelectedNumbers.length === 0) {
-                alert('❌ ቢያንስ አንድ ቁጥር ይምረጡ!');
-                return;
-            }
-            if (currentUser.balance < kenoBetAmount) {
-                alert('❌ በቂ ባላንስ የለዎትም!');
-                return;
-            }
+    if (kenoSelectedNumbers.length === 0) {
+        alert('❌ ቢያንስ አንድ ቁጥር ይምረጡ!');
+        return;
+    }
+    if (currentUser.balance < kenoBetAmount) {
+        alert('❌ በቂ ባላንስ የለዎትም!');
+        return;
+    }
 
-            try {
-                let res = await fetch('/api/keno/play', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: currentUser.telegramId, betAmount: kenoBetAmount, selectedNumbers: kenoSelectedNumbers })
-                });
-                let data = await res.json();
-                if (data.success) {
-                    currentUser.balance = data.newBalance;
-                    updateUIHeader();
-                    alert(`🎲 የኬኖ ጨዋታ ተጠናቀቀ!\n✨ ግጥሚያ: ${data.matchesCount}\n💰 ያሸነፉት: ETB ${data.winAmount}`);
-                    clearKenoSelection();
-                } else {
-                    alert(data.message || 'ስህተት ተፈጥሯል');
-                }
-            } catch (e) {
-                console.error(e);
-            }
+    try {
+        // 1. ጥያቄውን ወደ ባክኢንድ እንልካለን
+        let res = await fetch('/api/keno/play', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUser.telegramId, betAmount: kenoBetAmount, selectedNumbers: kenoSelectedNumbers })
+        });
+        let data = await res.json();
+        
+        if (!data.success) {
+            alert(data.message || 'ስህተት ተፈጥሯል');
+            return;
         }
+
+        // ባላንስን እና ዩዘርሂደሩን እናስተካክላለን
+        currentUser.balance = data.newBalance;
+        updateUIHeader();
+
+        // የቀድሞ የቀለም ውጤቶች ካሉ እናጠፋለን
+        document.querySelectorAll('.keno-num-btn').forEach(b => b.classList.remove('drawn-hit', 'drawn-miss'));
+
+        let drawnNumbers = data.drawnNumbers; // ከባክኢንድ የመጡት 20 ቁጥሮች
+        let currentIndex = 0;
+
+        // ተጠቃሚው ጨዋታው በሂደት ላይ እያለ ሌላ እንዳይነካ ቁልፎቹን ለጊዜው መቆለፍ እንችላለን
+        alert('🎲 የኬኖ ጨዋታ ተጀምሯል! ቁጥሮች በየ 3 ሰከንድ መውጣት ጀምረዋል...');
+
+        // 2. በየ 3 ሰከንድ (3000ms) ቁጥሮቹን አንድ በአንድ እያወጣ የሚያሳየው ሎጅክ
+        let drawInterval = setInterval(() => {
+            if (currentIndex < drawnNumbers.length) {
+                let num = drawnNumbers[currentIndex];
+                let btn = document.getElementById(`keno-btn-${num}`);
+                
+                if (btn) {
+                    // ተጠቃሚው መርጦት ከሆነ 'drawn-hit' (አረንጓዴ) ካልሆነ 'drawn-miss' (ቀይ/ደበዘዘ) እናደርገዋለን
+                    if (kenoSelectedNumbers.includes(num)) {
+                        btn.classList.add('drawn-hit');
+                    } else {
+                        btn.classList.add('drawn-miss');
+                    }
+                }
+                currentIndex++;
+            } else {
+                // 3. 20ቱ ቁጥሮች አልቀው ሲጨርሱ
+                clearInterval(drawInterval);
+                
+                setTimeout(() => {
+                    alert(`🎲 የኬኖ ጨዋታ ተጠናቀቀ!\n✨ ትክክለኛ ግጥሚያ: ${data.matchesCount}\n💰 ያሸነፉት: ETB ${data.winAmount}`);
+                    clearKenoSelection();
+                }, 500);
+            }
+        }, 3000); // <--- 3000 ሚሊሰከንድ (3 ሰከንድ)
+
+    } catch (e) {
+        console.error(e);
+        alert('❌ ሰርቨር ጋር መገናኘት አልተቻለም');
+    }
+}
 
         function toggleKenoPayoutModal(show) {
             let modal = document.getElementById('keno-payout-modal');
@@ -687,10 +717,13 @@
             }
         }
 
+        // --- 💰 የዲፖዚት ጥያቄ መላክ (በትራንዛክሽን መረጃ/ቴክስት) ---
         async function submitDeposit() {
             let amount = document.getElementById('deposit-amount-input').value;
-            if (!amount || amount <= 0) {
-                alert('❌ እባክዎ ትክክለኛ የብር መጠን ያስገቡ');
+            let transactionDetails = document.getElementById('deposit-tx-input').value;
+            
+            if (!amount || amount <= 0 || !transactionDetails) {
+                alert('❌ እባክዎ የብር መጠን እና የትራንዛክሽን መረጃውን በትክክል ይሙሉ');
                 return;
             }
 
@@ -698,12 +731,13 @@
                 let res = await fetch('/api/deposit', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: currentUser.telegramId, amount: Number(amount) })
+                    body: JSON.stringify({ userId: currentUser.telegramId, amount: Number(amount), transactionDetails })
                 });
                 let data = await res.json();
                 if (data.success) {
-                    alert('✅ የዲፖዚት ጥያቄዎ ለአድሚን ተልኳል!');
+                    alert('✅ የዲፖዚት ጥያቄዎ እና የትራንዛክሽን መረጃው ለአድሚን ተልኳል!');
                     document.getElementById('deposit-amount-input').value = '';
+                    document.getElementById('deposit-tx-input').value = '';
                 } else {
                     alert(data.message);
                 }
@@ -712,11 +746,11 @@
             }
         }
 
+        // --- 💳 የዊዝድሮ ጥያቄ መላክ (ስልክ ቁጥር አውቶማቲክ ከዳታቤዝ ተወስዶ) ---
         async function submitWithdraw() {
             let amount = document.getElementById('withdraw-amount-input').value;
-            let phone = document.getElementById('withdraw-phone-input').value;
-            if (!amount || amount <= 0 || !phone) {
-                alert('❌ እባክዎ መረጃውን በትክክል ይሙሉ');
+            if (!amount || amount <= 0) {
+                alert('❌ እባክዎ ማውጣት የሚፈልጉትን ትክክለኛ የብር መጠን ያስገቡ');
                 return;
             }
 
@@ -724,17 +758,16 @@
                 let res = await fetch('/api/withdraw', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: currentUser.telegramId, amount: Number(amount), phone })
+                    body: JSON.stringify({ userId: currentUser.telegramId, amount: Number(amount) })
                 });
                 let data = await res.json();
                 if (data.success) {
                     currentUser.balance = data.balance;
                     updateUIHeader();
-                    alert('✅ የዊዝድሮ ጥያቄዎ ተልኳል!');
+                    alert('✅ የዊዝድሮ ጥያቄዎ ተልኳል! በቅርቡ ይረጋገጣል።');
                     document.getElementById('withdraw-amount-input').value = '';
-                    document.getElementById('withdraw-phone-input').value = '';
                 } else {
-                    alert(data.message);
+                    alert(data.message || 'ስህተት ተፈጥሯል');
                 }
             } catch (e) {
                 console.error(e);

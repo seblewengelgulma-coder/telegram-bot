@@ -8,9 +8,8 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const { io } = require("socket.io-client"); // 👈 ይህንን መስመር ከላይ ያካትቱ
+const { io } = require("socket.io-client"); 
 
-// አሁን ከስር ያለው ኮድዎ በትክክል ይሰራል
 const socket = io('https://telegram-bot-xer2.onrender.com/');
 
 // --- 🌐 Express CORS & Body Middlewares ---
@@ -61,7 +60,7 @@ const User = mongoose.model('User', userSchema);
 const bingoGameSchema = new mongoose.Schema({
     gameId: { type: String, required: true, unique: true },
     cost: { type: Number, required: true },
-    status: { type: String, default: 'waiting' }, // waiting, active, cancelled, finished
+    status: { type: String, default: 'waiting' }, 
     players: { type: Array, default: [] }
 });
 const BingoGame = mongoose.model('BingoGame', bingoGameSchema);
@@ -218,8 +217,8 @@ async function getAssignedAdminPaymentInfo(assignedAdminId) {
         if (admin) {
             return `🏦 **የአድሚን የክፍያ አካውንት (ለዲፖዚት)**\n\n` +
                    `👤 **አድሚን:** ${admin.adminName}\n` +
-                   `1. **ንግድ ባንክ (CBE):** \`${admin.cbeAccount}\`\n` +
-                   `2. **ቴሌብር (Telebirr):** \`${admin.telebirr}\`\n\n`;
+                   `1. **ንግድ ባንክ (CBE):** \`${admin.cbeAccount || 'የለም'}\`\n` +
+                   `2. **ቴሌብር (Telebirr):** \`${admin.telebirr || 'የለም'}\`\n\n`;
         }
     }
     return `🏦 **የአድሚን የክፍያ አካውንት (ለዲፖዚት)**\n\n` +
@@ -421,7 +420,7 @@ app.get('/api/bingo/status', async (req, res) => {
 
 app.post('/api/deposit', async (req, res) => {
     try {
-        const { userId, amount, photoId } = req.body;
+        const { userId, amount, transactionDetails } = req.body;
         let user = await User.findOne({ userId: Number(userId) });
         if (!user) return res.status(404).json({ success: false, message: 'ተጠቃሚ አልተገኘም' });
 
@@ -432,23 +431,14 @@ app.post('/api/deposit', async (req, res) => {
             userName: user.userName,
             type: 'deposit',
             amount: Number(amount),
-            details: 'Mini App Screenshot Deposit',
-            photoId: photoId || null
+            details: transactionDetails || 'Mini App Deposit'
         });
         await newReq.save();
 
-        // ፎቶውን ጨምሮ ለአድሚን ለመላክ (photoId ካለ)
-        if (photoId) {
-            await bot.telegram.sendPhoto(assignedAdminId, photoId, {
-                caption: `📥 **አዲስ የዲፖዚት ጥያቄ (ከMini App)!**\n\n👤 **ስም:** ${user.userName} (ID: \`${userId}\`)\n💰 **መጠን:** ETB ${amount}`,
-                parse_mode: 'Markdown'
-            }).catch((e) => console.log('Admin photo send error:', e));
-        } else {
-            await bot.telegram.sendMessage(assignedAdminId, 
-                `📥 **አዲስ የዲፖዚት ጥያቄ (ከMini App)!**\n\n👤 **ስም:** ${user.userName} (ID: \`${userId}\`)\n💰 **መጠን:** ETB ${amount}`,
-                { parse_mode: 'Markdown' }
-            ).catch(() => {});
-        }
+        await bot.telegram.sendMessage(assignedAdminId, 
+            `📥 **አዲስ የዲፖዚት ጥያቄ (ከMini App)!**\n\n👤 **ስም:** ${user.userName} (ID: \`${userId}\`)\n💰 **መጠን:** ETB ${amount}\n\n📄 **የትራንዛክሽን መረጃ:**\n${transactionDetails || 'N/A'}`,
+            { parse_mode: 'Markdown' }
+        ).catch(() => {});
 
         res.json({ success: true, message: 'ጥያቄዎ ለአድሚን ተልኳል' });
     } catch (err) {
@@ -1408,6 +1398,7 @@ bot.action('back_to_main_menu', (ctx) => {
     ]));
 });
 
+// --- 💰 ዲፖዚት (Deposit Handler - ያለ ስክሪንሾት ፎቶ በትራንዛክሽን ቴክስት) ---
 bot.hears('💰 ዲፖዚት (Deposit)', async (ctx) => {
     const userId = ctx.from.id;
     let user = await getOrCreateUser(userId);
@@ -1423,20 +1414,31 @@ bot.hears('💰 ዲፖዚት (Deposit)', async (ctx) => {
     const paymentInfo = await getAssignedAdminPaymentInfo(user.assignedAdminId);
 
     userSteps[userId] = { action: 'deposit_amount' };
-    ctx.reply(`${paymentInfo}💰 እባክዎ **ሊያስገቡት የሚፈልጉትን የብር መጠን** ቁጥር ብቻ ይጻፉ:`, { parse_mode: 'Markdown' });
+    ctx.reply(
+        `${paymentInfo}💰 እባክዎ **ሊያስገቡት የሚፈልጉትን የብር መጠን** ቁጥር ብቻ ይጻፉ:`, 
+        { parse_mode: 'Markdown' }
+    );
 });
 
+// --- 💳 ዊዝድሮ (Withdraw Handler - ስልክ አውቶማቲክ ከ User Phone ወስዶ የብር መጠን ብቻ መጠየቅ) ---
 bot.hears('💳 ዊዝድሮ (Withdraw)', async (ctx) => {
     const userId = ctx.from.id;
     let user = await getOrCreateUser(userId);
+    
     if (!user.phone) {
         return ctx.reply(
             `⚠️ የዊዝድሮ ጥያቄ ከማቅረብዎ በፊት ስልክ ቁጥርዎ መመዝገብ አለበት።`,
             Markup.keyboard([[Markup.button.contactRequest('📱 ስልክ ቁጥር አጋራ (Share Contact)')]]).resize()
         );
     }
+
     userSteps[userId] = { action: 'withdraw_amount' };
-    ctx.reply(`💳 **የገንዘብ ማውጣት ጥያቄ**\n\nመቀበያ ስልክ ቁጥርዎ: **${user.phone}**\n\n💰 ማውጣት የሚፈልጉትን **የብር መጠን** ብቻ ቁጥር አድርገው ይጻፉ:`);
+    ctx.reply(
+        `💳 **የገንዘብ ማውጣት ጥያቄ (Withdrawal)**\n\n` +
+        `📱 መቀበያ ስልክ ቁጥርዎ: **${user.phone}** (በተመዘገበው ቁጥር ይላካል)\n\n` +
+        `💰 ማውጣት የሚፈልጉትን **የብር መጠን** ብቻ ቁጥር አድርገው ይጻፉ:`,
+        { parse_mode: 'Markdown' }
+    );
 });
 
 bot.hears('👤 ፕሮፋይል (Profile)', async (ctx) => {
@@ -1465,7 +1467,7 @@ bot.hears('💬 ኮሜንት (Comment)', (ctx) => {
 bot.hears('📖 መመሪያ (Instructions)', (ctx) => {
     ctx.reply(
         `📖 **የጨዋታዎች አጨዋወት መመሪያ**\n\n` +
-        `1. ዲፖዚት በመጫን ገንዘብ ገቢ በማድረግ ስክሪንሾት ፎቶ ይላኩ።\n` +
+        `1. ዲፖዚት በመጫን ገንዘብ ገቢ በማድረግ የትራንዛክሽን መረጃውን ይላኩ።\n` +
         `2. ፕለይ በመጫን **ቢንጎ** ወይም **ኬኖ** መጫወት ይችላሉ።\n` +
         `3. በየቀኑ ቢያንስ 3 ጊዜ በማሸነፍ ወደ ሳምንታዊው **የአሸናፊዎች አሸናፊ** ቶርናመንት ይቀላቀሉ!`
     );
@@ -1633,7 +1635,6 @@ bot.hears('📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', async (ctx) => {
     if (!isAdmin(ctx.from.id)) return;
     
     let filter = {};
-    // ሱፐር አድሚን (Owner) ካልሆነ በስተቀር የራሱን ጥያቄዎች ብቻ ያጣራል፤ 
     if (ctx.from.id !== OWNER_ID) {
         filter = { assignedAdminId: ctx.from.id };
     }
@@ -1642,8 +1643,7 @@ bot.hears('📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', async (ctx) => {
     if (reqs.length === 0) return ctx.reply('📭 ምንም የሚጠብቅ ጥያቄ የለም።', adminKeyboard);
 
     for (let r of reqs) {
-        // ማርክዳን ስህተት እንዳያመጣ ስሙንና details በኮድ ማቀፍ ወይም ማስተካከል ይቻላል
-        let msg = `📌 **አይነት:** ${r.type.toUpperCase()}\n👤 **ስም:** ${r.userName} (ID: \`${r.userId}\`)\n💰 **መጠን:** ETB ${r.amount}\n📱 **አካውንት:** \`${r.details}\``;
+        let msg = `📌 **አይነት:** ${r.type.toUpperCase()}\n👤 **ስም:** ${r.userName} (ID: \`${r.userId}\`)\n💰 **መጠን:** ETB ${r.amount}\n📱 **አካውንት/መረጃ:** \`${r.details}\``;
         
         let keyboard = Markup.inlineKeyboard([
             [Markup.button.callback('✅ አጽድቅ', `approve_req_${r._id}`), Markup.button.callback('❌ ውድቅ አድርግ', `reject_req_${r._id}`)]
@@ -1656,6 +1656,7 @@ bot.hears('📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', async (ctx) => {
         }
     }
 });
+
 bot.hears('💬 የተጫዋቾች ኮሜንቶች', async (ctx) => {
     if (!isAdmin(ctx.from.id)) return;
     
@@ -1669,7 +1670,7 @@ bot.hears('💬 የተጫዋቾች ኮሜንቶች', async (ctx) => {
     
     for (let c of comments) {
         let replyStatus = c.adminReply ? `\n✅ **ምላሽ:** ${c.adminReply}` : `\n❌ ምላሽ አልተሰጠበትም`;
-        let msg = `📌 **ከ:** ${c.userName} (ID: \`${c.userId}\`)\n💬 **መልእክት:** "${c.message}"${replyStatus}`;
+        let msg = `📌 **ከ:** ${c.userName} (ID: \`${userId}\`)\n💬 **መልእክት:** "${c.message}"${replyStatus}`;
         let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ', `reply_comment_${c._id}`)]]);
         
         if (c.photoId) {
@@ -1864,7 +1865,6 @@ bot.on('photo', async (ctx) => {
     const userName = ctx.from.first_name || 'ተጫዋች';
     let photo = ctx.message.photo[ctx.message.photo.length - 1];
     let photoId = photo.file_id;
-    let photoUniqueId = photo.file_unique_id;
 
     if (isAdmin(userId) && userSteps[userId] && userSteps[userId].action === 'admin_reply_comment') {
         let commentId = userSteps[userId].commentId;
@@ -1907,43 +1907,6 @@ bot.on('photo', async (ctx) => {
         let adminMsg = `📌 **አዲስ የኮሜንት ፎቶ መጣ!**\n\n👤 **ከ:** ${userName} (ID: \`${userId}\`)`;
         let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ', `reply_comment_${newComment._id}`)]]);
         return bot.telegram.sendPhoto(assignedAdminId, photoId, { caption: adminMsg, parse_mode: 'Markdown', ...replyBtn }).catch(()=>{});
-    }
-
-    if (userSteps[userId] && userSteps[userId].action === 'deposit_screenshot') {
-        let amount = userSteps[userId].amount;
-        let uploadDate = new Date();
-
-        let existingRequest = await RequestModel.findOne({ photoUniqueId });
-        if (existingRequest) {
-            delete userSteps[userId];
-            return ctx.reply(`❌ ይህ ስክሪንሾት ከዚህ በፊት ጥቅም ላይ ውሏል!`);
-        }
-
-        let userDoc = await User.findOne({ userId });
-        let assignedAdminId = userDoc?.assignedAdminId || OWNER_ID;
-
-        delete userSteps[userId];
-        let newReq = new RequestModel({ 
-            userId, 
-            assignedAdminId,
-            userName, 
-            type: 'deposit', 
-            amount, 
-            details: 'Telegram Screenshot Deposit',
-            photoUniqueId, 
-            photoId, 
-            date: uploadDate 
-        });
-        await newReq.save();
-
-        ctx.reply(`⏳ የዲፖዚት ጥያቄዎ ደርሷል! እባክዎ ይጠብቁ።`);
-
-        let adminMsg = `📥 **አዲስ የዲፖዚት ጥያቄ!**\n\n👤 **ስም:** ${userName} (ID: \`${userId}\`)\n💰 **መጠን:** ETB ${amount}`;
-        let adminKeyboard = Markup.inlineKeyboard([
-            [Markup.button.callback('✅ አጽድቅ', `approve_req_${newReq._id}`), Markup.button.callback('❌ ውድቅ አድርግ', `reject_req_${newReq._id}`)]
-        ]);
-
-        bot.telegram.sendPhoto(assignedAdminId, photoId, { caption: adminMsg, parse_mode: 'Markdown', ...adminKeyboard }).catch(()=>{});
     }
 });
 
@@ -2003,40 +1966,98 @@ bot.on('text', async (ctx) => {
     if (userSteps[userId]) {
         let stepInfo = userSteps[userId];
 
+        // 1. የዲፖዚት መጠን ከተቀበለ በኋላ የትራንዛክሽን ቴክስት/ሊንክ መቀበል
         if (stepInfo.action === 'deposit_amount') {
             const amount = parseInt(text.match(/\d+/)?.[0] || 0);
             if (amount <= 0) return ctx.reply(`❌ ትክክለኛ የብር መጠን ያስገቡ።`);
 
-            userSteps[userId] = { action: 'deposit_screenshot', amount };
-            return ctx.reply(`📸 እባክዎ **የክፍያ ስክሪንሾት (Screenshot)** ፎቶ ይላኩልን:`);
+            userSteps[userId] = { action: 'deposit_transaction_link', amount };
+            return ctx.reply(
+                `✅ የብር መጠን: **${amount} ETB** ተይዟል።\n\n` +
+                `📱 አሁን ገንዘቡን ከተላለፉ በኋላ የደረሰዎትን **የቴሌብር ወይም የባንክ ትራንዛክሽን ሜሴጅ/ሊንክ (Transaction Message/Link)** እዚህ ላይ ፔስት (Paste) አድርገው ይላኩት:`,
+                { parse_mode: 'Markdown' }
+            );
         }
 
+        // 2. የትራንዛክሽን ቴክስት/ሊንክ ተቀብሎ ለአድሚን መላክ
+        if (stepInfo.action === 'deposit_transaction_link') {
+            let amount = stepInfo.amount;
+            let transactionDetails = text;
+            delete userSteps[userId];
+
+            let userDoc = await User.findOne({ userId });
+            let assignedAdminId = userDoc?.assignedAdminId || OWNER_ID;
+            let userName = ctx.from.first_name || 'ተጫዋች';
+
+            let newReq = new RequestModel({ 
+                userId, 
+                assignedAdminId,
+                userName, 
+                type: 'deposit', 
+                amount, 
+                details: transactionDetails, 
+                date: new Date() 
+            });
+            await newReq.save();
+
+            ctx.reply(`⏳ የዲፖዚት ጥያቄዎ እና የትራንዛክሽን መረጃው ለአድሚን ተልኳል! እባክዎ በትንሽ ደቂቃ ውስጥ ይረጋገጣል።`, mainKeyboard);
+
+            let adminMsg = `📥 **አዲስ የዲፖዚት ጥያቄ (በትራንዛክሽን መረጃ)!**\n\n` +
+                           `👤 **ስም:** ${userName} (ID: \`${userId}\`)\n` +
+                           `💰 **መጠን:** ETB ${amount}\n\n` +
+                           `📄 **የትራንዛክሽን መረጃ/ሊንክ:**\n${transactionDetails}`;
+
+            let adminKeyboard = Markup.inlineKeyboard([
+                [Markup.button.callback('✅ አጽድቅ', `approve_req_${newReq._id}`), Markup.button.callback('❌ ውድቅ አድርግ', `reject_req_${newReq._id}`)]
+            ]);
+
+            bot.telegram.sendMessage(assignedAdminId, adminMsg, { parse_mode: 'Markdown', ...adminKeyboard }).catch(()=>{});
+            return;
+        }
+
+        // 3. ዊዝድሮ (Withdraw Amount - ስልክ ቁጥር አውቶማቲክ ተወስዶ የብር መጠን ብቻ)
         if (stepInfo.action === 'withdraw_amount') {
             const amount = parseInt(text.match(/\d+/)?.[0] || 0);
+            if (isNaN(amount) || amount <= 0) {
+                return ctx.reply(`❌ እባክዎ ትክክለኛ የብር መጠን ያስገቡ።`);
+            }
+
             delete userSteps[userId];
             let user = await getOrCreateUser(userId);
-            if (user.balance < amount) return ctx.reply(`❌ በቂ ባላንስ የለዎትም!`);
+
+            if (user.balance < amount) {
+                return ctx.reply(`❌ በቂ ባላንስ የለዎትም! ያሎት ባላንስ: **ETB ${user.balance}** ነው`, { parse_mode: 'Markdown' });
+            }
 
             user.balance -= amount;
             await user.save();
 
             let assignedAdminId = user.assignedAdminId || OWNER_ID;
+            let userName = ctx.from.first_name || 'ተጫዋች';
 
             let newReq = new RequestModel({ 
                 userId, 
                 assignedAdminId,
-                userName: user.userName, 
+                userName, 
                 type: 'withdraw', 
                 amount, 
-                details: user.phone 
+                details: user.phone, 
+                date: new Date() 
             });
             await newReq.save();
 
-            ctx.reply(`⏳ የዊዝድሮ ጥያቄዎ ለአድሚን ተልኳል!`);
+            ctx.reply(`⏳ የዊዝድሮ ጥያቄዎ ለአድሚን ተልኳል! በቅርቡ ይረጋገጣል።\n💼 የቀረ ባላንስ: **ETB ${user.balance}**`, { parse_mode: 'Markdown' });
 
-            let adminMsg = `📥 **አዲስ የዊዝድሮ ጥያቄ!**\n\n👤 **ስም:** ${user.userName} (ID: \`${userId}\`)\n💰 **መጠን:** ETB ${amount}\n📱 **ስልክ:** \`${user.phone}\``;
+            let adminMsg = `📥 **አዲስ የዊዝድሮ ጥያቄ!**\n\n` +
+                           `👤 **ስም:** ${userName} (ID: \`${userId}\`)\n` +
+                           `💰 **መጠን:** ETB ${amount}\n` +
+                           `📱 **መቀበያ ስልክ:** \`${user.phone}\``;
+
             let adminKeyboard = Markup.inlineKeyboard([
-                [Markup.button.callback('✅ አጽድቅ', `approve_req_${newReq._id}`), Markup.button.callback('❌ ውድቅ አድርግ', `reject_req_${newReq._id}`)]
+                [
+                    Markup.button.callback('✅ አጽድቅ', `approve_req_${newReq._id}`), 
+                    Markup.button.callback('❌ ውድቅ አድርግ', `reject_req_${newReq._id}`)
+                ]
             ]);
 
             bot.telegram.sendMessage(assignedAdminId, adminMsg, { parse_mode: 'Markdown', ...adminKeyboard }).catch(()=>{});
@@ -2074,7 +2095,6 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// 🛠️ ይሄንን አዲስ ሮት ጨምር (ይህም /miniapp የሚለውን ስህተት ያስወግዳል)
 app.get('/miniapp', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
