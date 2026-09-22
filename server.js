@@ -8,7 +8,9 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-// ከባክ-ኢንድ ሰርቨር ጋር መገናኘት (ሰርቨርዎ የሚገኝበትን አድራሻ ያስገቡ)
+const { io } = require("socket.io-client"); // 👈 ይህንን መስመር ከላይ ያካትቱ
+
+// አሁን ከስር ያለው ኮድዎ በትክክል ይሰራል
 const socket = io('https://telegram-bot-xer2.onrender.com/');
 
 // --- 🌐 Express CORS & Body Middlewares ---
