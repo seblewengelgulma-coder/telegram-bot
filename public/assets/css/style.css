@@ -1,0 +1,86 @@
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: #0f0c1b;
+    color: #f3f4f6;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+::-webkit-scrollbar {
+    width: 4px;
+}
+::-webkit-scrollbar-track {
+    background: rgba(15, 12, 27, 0.6);
+}
+::-webkit-scrollbar-thumb {
+    background: #8b5cf6;
+    border-radius: 4px;
+}
+
+.glass-card {
+    background: rgba(30, 23, 54, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.glass-card-gold {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(180, 83, 9, 0.2));
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.btn-neon-purple {
+    background: linear-gradient(135deg, #7c3aed, #4c1d95);
+    box-shadow: 0 0 15px rgba(124, 58, 237, 0.4);
+    transition: all 0.2s ease;
+}
+.btn-neon-purple:active {
+    transform: scale(0.96);
+    box-shadow: 0 0 5px rgba(124, 58, 237, 0.6);
+}
+
+.btn-neon-gold {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: #000;
+    font-weight: 700;
+    box-shadow: 0 0 15px rgba(245, 158, 11, 0.4);
+    transition: all 0.2s ease;
+}
+.btn-neon-gold:active {
+    transform: scale(0.96);
+    box-shadow: 0 0 5px rgba(245, 158, 11, 0.6);
+}
+
+.bingo-cell {
+    transition: all 0.15s ease;
+    aspect-ratio: 1;
+}
+.bingo-cell.marked {
+    background: linear-gradient(135deg, #10b981, #047857) !important;
+    color: #ffffff !important;
+    border-color: #34d399 !important;
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+}
+
+.keno-num-btn {
+    aspect-ratio: 1;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.keno-num-btn.selected {
+    background: linear-gradient(135deg, #ec4899, #be185d) !important;
+    color: #fff !important;
+    border-color: #f472b6 !important;
+    box-shadow: 0 0 12px rgba(236, 72, 153, 0.6);
+    transform: scale(1.05);
+}
+
+.ball-pop {
+    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+@keyframes popIn {
+    0% { transform: scale(0); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+}
