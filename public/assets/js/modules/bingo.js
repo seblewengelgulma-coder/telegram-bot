@@ -112,15 +112,16 @@ export function showBingoLiveBoard(data, currentUser, updateHeaderFn) {
     document.getElementById('bingo-status-badge').innerText = 'ንቁ ጨዋታ';
 
     currentBingoMatrix = data.matrix || [];
-    updateBoardUI(data);
+    renderInitialMatrix(currentBingoMatrix); // 1. መጀመሪያ ማትሪክሱን መገንባት
+    updateBoardUI(data); // 2. የወጡትን ቁጥሮች ማሳየት
 
-    // 🔄 በየ 6 ሰከንዱ አዳዲስ የወጡ ቁጥሮችን ከሰርቨር ማዘመኛ
+    // 🔄 በየ 6 ሰከንዱ አዳዲስ የወጡ ቁጥሮችን እና የጨዋታውን ሁኔታ ብቻ ማዘመኛ
     if (liveGameInterval) clearInterval(liveGameInterval);
     liveGameInterval = setInterval(async () => {
         try {
             let liveData = await fetchBingoStatusAPI(currentUser.telegramId, currentGameId);
             if (liveData.success) {
-                updateBoardUI(liveData);
+                updateBoardUI(liveData); // 👈 Grid-ን እንደገና ሳይገነባ የወጡ ቁጥሮችን ብቻ ያዘምናል
 
                 // ሌላ ሰው አሸንፎ ጨዋታው ካለቀ
                 if (liveData.status === 'completed') {
@@ -135,27 +136,19 @@ export function showBingoLiveBoard(data, currentUser, updateHeaderFn) {
     }, 6000); // 6 ሰከንድ
 }
 
-// 📌 የሰሌዳውን ቁጥሮች እና የወጡ ቁጥሮችን ማሳያ ማዘመኛ
-function updateBoardUI(data) {
-    if (data.currentBall) {
-        document.getElementById('bingo-current-ball').innerText = getFormattedBingoNum(data.currentBall);
-    }
-    if (data.history && data.history.length > 0) {
-        let formattedHistory = data.history.map(n => getFormattedBingoNum(n)).join(', ');
-        document.getElementById('bingo-history-balls').innerText = formattedHistory;
-    }
-
+// 🧱 1. የካርዱን Grid መጀመሪያ ላይ አንድ ጊዜ ብቻ መገንቢያ (ተጫዋቹ ሲነካው ማርክ የተደረገው እንዳይጠፋ)
+function renderInitialMatrix(matrix) {
     let grid = document.getElementById('bingo-matrix-grid');
     if (!grid) return;
     grid.innerHTML = '';
 
-    currentBingoMatrix.forEach((row, rIdx) => {
+    matrix.forEach((row, rIdx) => {
         row.forEach((cell, cIdx) => {
             let div = document.createElement('div');
             div.className = `bingo-cell glass-card rounded-xl flex items-center justify-center text-xs font-bold cursor-pointer transition-all ${cell.marked ? 'marked bg-amber-500 text-black font-extrabold' : 'text-gray-200'}`;
             div.innerText = cell.display || cell.value;
             
-            // 👆 ተጫዋቹ በእጁ ማርክ ማድረጊያ
+            // 👆 ተጫዋቹ በእጁ ማርክ ሲያደርግ state-ው ይቀመጣል
             div.onclick = () => {
                 cell.marked = !cell.marked;
                 div.classList.toggle('marked');
@@ -165,6 +158,17 @@ function updateBoardUI(data) {
             grid.appendChild(div);
         });
     });
+}
+
+// 📌 2. ከላይ የወጡትን ቁጥሮች (Current Ball & History) ብቻ ማዘመኛ
+function updateBoardUI(data) {
+    if (data.currentBall) {
+        document.getElementById('bingo-current-ball').innerText = getFormattedBingoNum(data.currentBall);
+    }
+    if (data.history && data.history.length > 0) {
+        let formattedHistory = data.history.map(n => getFormattedBingoNum(n)).join(', ');
+        document.getElementById('bingo-history-balls').innerText = formattedHistory;
+    }
 }
 
 // 🎯 ቢንጎ ማለት እና አሸናፊነትን ማረጋገጥ
