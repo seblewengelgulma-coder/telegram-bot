@@ -1,7 +1,10 @@
-import { pickBingoNumberAPI, fetchBingoStatusAPI, sendBingoTimeoutAPI } from './api.js';
+import { pickBingoNumberAPI, fetchBingoStatusAPI, sendBingoTimeoutAPI, claimBingoAPI } from './api.js';
 
 let selectedBingoCost = 10;
 let waitingInterval = null;
+let liveGameInterval = null;
+let currentGameId = null;
+let currentBingoMatrix = [];
 
 export function getFormattedBingoNum(num) {
     if (num >= 1 && num <= 15) return `B${num}`;
@@ -50,6 +53,8 @@ export async function pickBingoNumber(num, currentUser, updateHeaderFn) {
             currentUser.balance = data.newBalance;
             updateHeaderFn();
 
+            currentGameId = data.gameId;
+
             document.getElementById('bingo-bet-selector').classList.add('hidden');
             document.getElementById('bingo-pick-section').classList.add('hidden');
             document.getElementById('bingo-waiting-card').classList.remove('hidden');
@@ -79,7 +84,7 @@ export function startWaitingCountdown(gameId, currentUser, updateHeaderFn) {
             let data = await fetchBingoStatusAPI(currentUser.telegramId, gameId);
             if (data.success && data.status === 'active') {
                 clearInterval(waitingInterval);
-                showBingoLiveBoard(data);
+                showBingoLiveBoard(data, currentUser, updateHeaderFn);
             }
         } catch (e) {}
 
@@ -101,30 +106,100 @@ export function startWaitingCountdown(gameId, currentUser, updateHeaderFn) {
     }, 1000);
 }
 
-export function showBingoLiveBoard(data) {
+export function showBingoLiveBoard(data, currentUser, updateHeaderFn) {
     document.getElementById('bingo-waiting-card').classList.add('hidden');
     document.getElementById('bingo-live-board').classList.remove('hidden');
     document.getElementById('bingo-status-badge').innerText = 'ንቁ ጨዋታ';
 
-    document.getElementById('bingo-current-ball').innerText = data.currentBall || '--';
-    document.getElementById('bingo-history-balls').innerText = data.history?.join(', ') || '-';
+    currentBingoMatrix = data.matrix || [];
+    updateBoardUI(data);
+
+    // 🔄 በየ 6 ሰከንዱ አዳዲስ የወጡ ቁጥሮችን ከሰርቨር ማዘመኛ
+    if (liveGameInterval) clearInterval(liveGameInterval);
+    liveGameInterval = setInterval(async () => {
+        try {
+            let liveData = await fetchBingoStatusAPI(currentUser.telegramId, currentGameId);
+            if (liveData.success) {
+                updateBoardUI(liveData);
+
+                // ሌላ ሰው አሸንፎ ጨዋታው ካለቀ
+                if (liveData.status === 'completed') {
+                    clearInterval(liveGameInterval);
+                    alert(`🏆 ጨዋታው ተጠናቋል! አሸናፊ: ${liveData.winnerName || 'ሌላ ተጫዋች'}`);
+                    resetToMainScreen();
+                }
+            }
+        } catch (e) {
+            console.error('Live Board Error:', e);
+        }
+    }, 6000); // 6 ሰከንድ
+}
+
+// 📌 የሰሌዳውን ቁጥሮች እና የወጡ ቁጥሮችን ማሳያ ማዘመኛ
+function updateBoardUI(data) {
+    if (data.currentBall) {
+        document.getElementById('bingo-current-ball').innerText = getFormattedBingoNum(data.currentBall);
+    }
+    if (data.history && data.history.length > 0) {
+        let formattedHistory = data.history.map(n => getFormattedBingoNum(n)).join(', ');
+        document.getElementById('bingo-history-balls').innerText = formattedHistory;
+    }
 
     let grid = document.getElementById('bingo-matrix-grid');
+    if (!grid) return;
     grid.innerHTML = '';
-    data.matrix.forEach((row) => {
-        row.forEach((cell) => {
+
+    currentBingoMatrix.forEach((row, rIdx) => {
+        row.forEach((cell, cIdx) => {
             let div = document.createElement('div');
-            div.className = `bingo-cell glass-card rounded-xl flex items-center justify-center text-xs font-bold ${cell.marked ? 'marked' : ''}`;
-            div.innerText = cell.display;
+            div.className = `bingo-cell glass-card rounded-xl flex items-center justify-center text-xs font-bold cursor-pointer transition-all ${cell.marked ? 'marked bg-amber-500 text-black font-extrabold' : 'text-gray-200'}`;
+            div.innerText = cell.display || cell.value;
+            
+            // 👆 ተጫዋቹ በእጁ ማርክ ማድረጊያ
             div.onclick = () => {
                 cell.marked = !cell.marked;
                 div.classList.toggle('marked');
+                div.classList.toggle('bg-amber-500');
+                div.classList.toggle('text-black');
             };
             grid.appendChild(div);
         });
     });
 }
 
-export function claimBingo() {
-    alert('🎯 ቢንጎ አረጋግጥ ተጫኗል!');
+// 🎯 ቢንጎ ማለት እና አሸናፊነትን ማረጋገጥ
+export async function claimBingo(currentUser, updateHeaderFn) {
+    if (!currentGameId) {
+        alert('❌ ንቁ ጨዋታ አልተገኘም!');
+        return;
+    }
+
+    try {
+        let res = await claimBingoAPI(currentUser.telegramId, currentGameId, currentBingoMatrix);
+        if (res.success) {
+            if (liveGameInterval) clearInterval(liveGameInterval);
+            currentUser.balance = res.newBalance;
+            updateHeaderFn();
+
+            alert(`🎉 እንኳን ደስ አለዎት! ቢንጎ ሞልተዋል!\n💰 ያሸነፉት፡ ETB ${res.winAmount}`);
+            resetToMainScreen();
+        } else {
+            alert(res.message || '❌ ገና ቢንጎ አልሞሉም ወይም ቁጥሮቹ አልተጠሩም!');
+        }
+    } catch (e) {
+        console.error(e);
+        alert('❌ ሰርቨር ማረጋገጥ አልተቻለም!');
+    }
+}
+
+// 🔄 ጨዋታ ሲያልቅ ወደ ዋናው ገፅ መመለሻ
+function resetToMainScreen() {
+    if (liveGameInterval) clearInterval(liveGameInterval);
+    if (waitingInterval) clearInterval(waitingInterval);
+
+    document.getElementById('bingo-live-board').classList.add('hidden');
+    document.getElementById('bingo-waiting-card').classList.add('hidden');
+    document.getElementById('bingo-bet-selector').classList.remove('hidden');
+    document.getElementById('bingo-pick-section').classList.remove('hidden');
+    document.getElementById('bingo-status-badge').innerText = 'ዝግጁ';
 }

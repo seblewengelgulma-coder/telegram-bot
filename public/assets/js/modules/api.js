@@ -28,6 +28,16 @@ export async function sendBingoTimeoutAPI(userId, gameId) {
     return await res.json();
 }
 
+// 🎯 አዲስ የተጨመረ - የቢንጎ አሸናፊነት ማረጋገጫ API
+export async function claimBingoAPI(userId, gameId, matrix) {
+    let res = await fetch('/api/bingo/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, gameId, matrix })
+    });
+    return await res.json();
+}
+
 export async function playKenoAPI(userId, betAmount, selectedNumbers) {
     let res = await fetch('/api/keno/play', {
         method: 'POST',
