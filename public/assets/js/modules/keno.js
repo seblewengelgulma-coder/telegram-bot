@@ -1,24 +1,24 @@
 import { playKenoAPI } from './api.js';
 
 let kenoSelectedNumbers = [];
-let kenoBetAmount = 10; // ቤዝ ውርርድ
+let kenoBetAmount = 10; // ቋሚ የውርርድ መጠን
 let isGameRunning = false;
 
-// 📌 0. በፍሮንትኤንድ ለ Payout Modal ማሳያ ብቻ የሚያገለግል የማባዣ ማትሪክስ (ከባክኤንድ ጋር ተመሳሳይ)
+// 📌 0. የኬኖ የማባዣ ማትሪክስ (Payout Multiplier Matrix)
 const KENO_PAYOUT_TABLE = {
-    1: { 1: "0.5x" },
-    2: { 1: "0.5x", 2: "1.2x" },
-    3: { 2: "1.0x", 3: "1.6x" },
-    4: { 2: "0.5x", 3: "1.2x", 4: "2.2x" },
-    5: { 3: "1.2x", 4: "1.8x", 5: "2.8x" },
-    6: { 3: "1.0x", 4: "1.5x", 5: "2.2x", 6: "3.5x" },
-    7: { 4: "1.2x", 5: "2.0x", 6: "3.0x", 7: "4.5x" },
-    8: { 4: "1.0x", 5: "1.8x", 6: "3.0x", 7: "4.5x", 8: "6.0x" },
-    9: { 5: "1.5x", 6: "2.5x", 7: "4.5x", 8: "7.0x", 9: "10.0x" },
-    10: { 5: "1.0x", 6: "2.0x", 7: "4.0x", 8: "8.0x", 9: "12.0x", 10: "20.0x" }
+    1: { 1: "3.8x" },
+    2: { 2: "15.0x" },
+    3: { 2: "2.0x", 3: "46.0x" },
+    4: { 2: "1.0x", 3: "5.0x", 4: "100.0x" },
+    5: { 3: "3.0x", 4: "15.0x", 5: "300.0x" },
+    6: { 3: "1.0x", 4: "10.0x", 5: "70.0x", 6: "1800.0x" },
+    7: { 4: "2.0x", 5: "20.0x", 6: "100.0x", 7: "5000.0x" },
+    8: { 4: "2.0x", 5: "12.0x", 6: "50.0x", 7: "1000.0x", 8: "15000.0x" },
+    9: { 4: "1.0x", 5: "6.0x", 6: "25.0x", 7: "200.0x", 8: "4000.0x", 9: "40000.0x" },
+    10: { 5: "5.0x", 6: "15.0x", 7: "80.0x", 8: "500.0x", 9: "10000.0x", 10: "100000.0x" }
 };
 
-// 📌 1. የውርርድ መጠን ማስተካከያ እና UI ማዘመኛ
+// 📌 1. የውርርድ መጠን ማስተካከያ
 export function setKenoBet(amount, targetBtn) {
     if (isGameRunning) return;
 
@@ -36,16 +36,15 @@ export function setKenoBet(amount, targetBtn) {
     }
 }
 
-// 📌 2. የጠቅላላ ውርርድ እና የቁጥሮች ብዛት ማሳያ
+// 📌 2. የውርርድ መጠን እና የተመረጡ ቁጥሮች ብዛት ማሳያ (FIXED: ቁጥር ስለተመረጠ ውርርዱ አይበዛም)
 function updateBetDisplay() {
     let betDisplay = document.getElementById('keno-current-bet-display');
     let countElem = document.getElementById('keno-selected-count');
 
     let count = kenoSelectedNumbers.length;
-    let totalBet = count > 0 ? kenoBetAmount * count : kenoBetAmount;
 
     if (betDisplay) {
-        betDisplay.innerText = `ETB ${totalBet}`;
+        betDisplay.innerText = `ETB ${kenoBetAmount}`; // 👈 ቋሚ ውርርድ
     }
     if (countElem) {
         countElem.innerText = count;
@@ -65,7 +64,7 @@ export function initKenoGrid() {
     grid.innerHTML = '';
     for (let i = 1; i <= 80; i++) {
         let btn = document.createElement('button');
-        btn.className = 'keno-num-btn glass-card rounded-lg text-gray-200 border border-purple-900 p-2 text-center font-bold transition-all';
+        btn.className = 'keno-num-btn glass-card rounded-lg text-gray-200 border border-purple-900 p-2 text-center font-bold transition-all hover:border-amber-400';
         btn.innerText = i;
         btn.id = `keno-btn-${i}`;
         btn.onclick = () => toggleKenoNum(i, btn);
@@ -99,7 +98,7 @@ export function clearKenoSelection() {
 
     kenoSelectedNumbers = [];
     document.querySelectorAll('.keno-num-btn').forEach(b => {
-        b.classList.remove('selected', 'bg-pink-600', 'text-white', 'drawn-hit', 'drawn-miss', 'opacity-40');
+        b.classList.remove('selected', 'bg-pink-600', 'text-white', 'drawn-hit', 'drawn-miss', 'opacity-40', 'bg-green-500', 'text-black');
     });
     
     updateBetDisplay();
@@ -130,7 +129,7 @@ function setGridLock(lock) {
     });
 }
 
-// 📌 6. ጨዋታ ማስጀመሪያ (Interval)
+// 📌 6. ጨዋታ ማስጀመሪያ (FIXED: ትክክለኛውን ውርርድ ብቻ ይቀንሳል)
 export async function startKenoDraw(currentUser, updateHeaderFn) {
     if (isGameRunning) return;
 
@@ -139,15 +138,14 @@ export async function startKenoDraw(currentUser, updateHeaderFn) {
         return;
     }
 
-    let calculatedTotalBet = kenoBetAmount * kenoSelectedNumbers.length;
-
-    if (currentUser.balance < calculatedTotalBet) {
-        alert(`❌ በቂ ባላንስ የለዎትም! የሚፈልገው: ETB ${calculatedTotalBet}`);
+    // 👈 ተጫዋቹ የመረጠው ቋሚ ውርርድ ብቻ ነው የሚቀነሰው
+    if (currentUser.balance < kenoBetAmount) {
+        alert(`❌ በቂ ባላንስ የለዎትም! የሚፈልገው: ETB ${kenoBetAmount}`);
         return;
     }
 
     try {
-        let data = await playKenoAPI(currentUser.telegramId, calculatedTotalBet, kenoSelectedNumbers);
+        let data = await playKenoAPI(currentUser.telegramId, kenoBetAmount, kenoSelectedNumbers);
         
         if (!data.success) {
             alert(data.message || 'ስህተት ተፈጥሯል');
@@ -170,7 +168,7 @@ export async function startKenoDraw(currentUser, updateHeaderFn) {
         let drawnNumbers = data.drawnNumbers || [];
         let currentIndex = 0;
 
-        const DRAW_SPEED_MS = 1500; 
+        const DRAW_SPEED_MS = 1500; // በየ 1.5 ሰከንዱ ቁጥር ይወጣል (3000 ማድረግ ትችላለህ)
 
         let drawInterval = setInterval(() => {
             if (currentIndex < drawnNumbers.length) {
@@ -209,7 +207,7 @@ export async function startKenoDraw(currentUser, updateHeaderFn) {
                 }
 
                 setTimeout(() => {
-                    alert(`🎲 የኬኖ ጨዋታ ተጠናቀቀ!\n✨ ትክክለኛ ግጥሚያ: ${data.matchesCount}\n💰 ያሸነፉት: ETB ${data.winAmount}`);
+                    alert(`🎲 የኬኖ ጨዋታ ተጠናቀቀ!\n✨ ትክክለኛ ግጥሚያ (Hits): ${data.matchesCount}\n💰 ያሸነፉት: ETB ${data.winAmount}`);
                 }, 400);
             }
         }, DRAW_SPEED_MS);
@@ -222,7 +220,7 @@ export async function startKenoDraw(currentUser, updateHeaderFn) {
     }
 }
 
-// 📌 7. የ Payout Modal ማሳያና ይዘት ማዘጋጃ
+// 📌 7. የ Payout Modal ማሳያ
 export function toggleKenoPayoutModal(show) {
     let modal = document.getElementById('keno-payout-modal');
     if (!modal) return;
