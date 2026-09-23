@@ -1,15 +1,16 @@
 const mongoose = require('mongoose');
 
-const requestSchema = new mongoose.Schema({
-  userId: { type: Number, required: true },
-  assignedAdminId: { type: Number, default: null },
-  userName: { type: String },
-  type: { type: String, required: true },
-  amount: { type: Number, required: true },
-  details: { type: String, required: true },
-  photoUniqueId: { type: String, unique: true, sparse: true }, 
-  photoId: { type: String, sparse: true }, 
-  date: { type: Date, default: Date.now }
+const depositSchema = new mongoose.Schema({
+    userId: { type: String, required: true },
+    amount: { type: Number, required: true },
+    // txHash ወይም transactionId ይደገም እንዳይሆን unique: true እናደርጋለን
+    transactionId: { 
+        type: String, 
+        required: true, 
+        unique: true // 👈 1. በዳታቤዝ ደረጃ መደገምን ይከለክላል
+    },
+    status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+    createdAt: { type: Date, default: Date.now }
 });
 
-module.exports = mongoose.model('Request', requestSchema);
+module.exports = mongoose.model('Deposit', depositSchema);
