@@ -149,6 +149,17 @@
                     </div>
                 </div>
 
+                <!-- 📌 አዲስ የተጨመረ: የቀጥታ የማባዣ እና የሽልማት ማሳያ (Live Potential Payout Bar) -->
+                <div class="glass-card-gold p-3 rounded-xl border border-amber-500/40 mb-3 text-center shadow-lg">
+                    <div class="text-[11px] font-medium text-amber-200">የመረጧቸውን ሁሉ ቢመቱ የሚያሸንፉት (Potential Win)</div>
+                    <div class="text-2xl font-black text-amber-400 mt-0.5 tracking-wide" id="keno-potential-win">ETB 0.00</div>
+                    <div class="text-[10px] text-purple-200 mt-1 flex justify-center items-center gap-3">
+                        <span>ተግባራዊ ማባዣ: <b id="keno-potential-multiplier" class="text-amber-300 font-extrabold">0x</b></span>
+                        <span>•</span>
+                        <span>የተመረጡ: <b id="keno-selected-count-badge" class="text-amber-300 font-bold">0/10</b></span>
+                    </div>
+                </div>
+
                 <!-- የ 1 እስከ 80 ቁጥሮች መምረጫ ሰሌዳ GRID -->
                 <div class="grid grid-cols-8 gap-1 p-2 glass-card rounded-xl border border-purple-900/50 mb-3" id="keno-80-grid">
                     <!-- ቁጥሮቹ በ JavaScript ይፈጠራሉ -->
@@ -166,7 +177,7 @@
                     <i class="fa-solid fa-play"></i> 🎲 ኬኖ ጨዋታ ጀምር (Draw)
                 </button>
 
-                <!-- 📌 የተጠሩ ቁጥሮች ማሳያ (እዚህ ጋር ያስገቡት) -->
+                <!-- 📌 የተጠሩ ቁጥሮች ማሳያ -->
                 <div class="mt-4 p-3 glass-card rounded-xl border border-purple-800/80 shadow-inner">
                     <h4 class="text-xs font-semibold text-purple-300 mb-2 text-center">🎲 በጨዋታው የተጠሩ ቁጥሮች (Called Numbers)</h4>
                     <div id="keno-drawn-container" class="flex flex-row items-center gap-2 overflow-x-auto p-2 min-h-[50px] bg-black/40 rounded-lg">
