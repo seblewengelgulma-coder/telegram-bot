@@ -5,11 +5,10 @@ const cron = require('node-cron');
 const path = require('path');
 const http = require('http');
 const { Server } = require('socket.io');
-const { io: ioClient } = require('socket.io-client');
 
 const { connectDB, setupSocket } = require('./config/db');
 const { bot } = require('./bot/botInstance');
-const { seedAdminAccounts, seedAdminAccounts: initAdmins } = require('./bot/helpers');
+const { seedAdminAccounts } = require('./bot/helpers');
 
 // Routes
 const userRoutes = require('./routes/userRoutes');
@@ -35,15 +34,6 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3000;
 
-// Socket.io connection client (optional self/external connection)
-const externalSocket = ioClient('https://telegram-bot-xer2.onrender.com/');
-
-// Connect Database & Setup Sockets
-connectDB().then(() => {
-  seedAdminAccounts();
-});
-setupSocket(io);
-
 // --- Express Middlewares ---
 app.use(cors({
   origin: '*',
@@ -51,6 +41,9 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
 app.use(express.json());
+
+// --- Static Files Serving (Frontend) ---
+app.use(express.static(path.join(__dirname, 'public')));
 
 // --- API Routes Connection ---
 app.use('/api/user', userRoutes);
@@ -65,12 +58,26 @@ registerBingoHandlers(bot);
 registerKenoHandlers(bot);
 registerTextAndPhotoHandlers(bot);
 
-// Launch Telegraf Bot
-bot.launch().then(() => {
-  console.log('🤖 Telegram Bot launched successfully!');
+// --- Connect Database & Setup Sockets ---
+connectDB().then(() => {
+  console.log('✅ MongoDB Connected');
+  seedAdminAccounts();
+  setupSocket(io);
 }).catch(err => {
-  console.error('❌ Bot launch failed:', err);
+  console.error('❌ Database connection failed:', err);
 });
+
+// Launch Telegraf Bot (Delete existing webhook to avoid conflicts)
+bot.telegram.deleteWebhook()
+  .then(() => {
+    return bot.launch();
+  })
+  .then(() => {
+    console.log('🤖 Telegram Bot launched successfully!');
+  })
+  .catch(err => {
+    console.error('❌ Bot launch failed:', err);
+  });
 
 // Enable graceful stop for bot
 process.once('SIGINT', () => bot.stop('SIGINT'));
@@ -78,29 +85,37 @@ process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
 // --- Cron Jobs ---
 cron.schedule('0 0 * * *', async () => {
-  await User.updateMany({}, { dailyWins: 0 });
-  console.log('🔄 የዕለቱ የጨዋታ ገደብ ታድሷል');
+  try {
+    await User.updateMany({}, { dailyWins: 0 });
+    console.log('🔄 የዕለቱ የጨዋታ ገደብ ታድሷል');
+  } catch (err) {
+    console.error('Cron job error:', err);
+  }
 });
 
 cron.schedule('0 0 * * 0', async () => {
-  let winners = await User.find({ qualifiedDays: { $gt: 0 } }).sort({ weeklyWins: -1 }).limit(3);
+  try {
+    let winners = await User.find({ qualifiedDays: { $gt: 0 } }).sort({ weeklyWins: -1 }).limit(3);
 
-  if (winners.length > 0) {
-    const rewards = [500, 300, 100];
+    if (winners.length > 0) {
+      const rewards = [500, 300, 100];
 
-    for (let i = 0; i < winners.length; i++) {
-      let reward = rewards[i] || 50;
-      winners[i].balance += reward;
-      await winners[i].save();
+      for (let i = 0; i < winners.length; i++) {
+        let reward = rewards[i] || 50;
+        winners[i].balance += reward;
+        await winners[i].save();
 
-      bot.telegram.sendMessage(
-        winners[i].userId,
-        `🎉 **እንኳን ደስ አሎት!** የሳምንቱ **የአሸናፊዎች አሸናፊ** ቶርናመንት ${i + 1}ኛ በመውጣትዎ **ETB ${reward}** ቦነስ አግኝተዋል!`
-      ).catch(() => {});
+        bot.telegram.sendMessage(
+          winners[i].userId,
+          `🎉 **እንኳን ደስ አሎት!** የሳምንቱ **የአሸናፊዎች አሸናፊ** ቶርናመንት ${i + 1}ኛ በመውጣትዎ **ETB ${reward}** ቦነስ አግኝተዋል!`
+        ).catch(() => {});
+      }
     }
-  }
 
-  await User.updateMany({}, { weeklyWins: 0, qualifiedDays: 0 });
+    await User.updateMany({}, { weeklyWins: 0, qualifiedDays: 0 });
+  } catch (err) {
+    console.error('Cron job weekly tournament error:', err);
+  }
 });
 
 // Start Express Server
