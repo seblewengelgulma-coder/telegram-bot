@@ -313,7 +313,7 @@ async function animateKenoResult(data, selected) {
     const s = document.createElement("span");
     s.textContent = n;
     balls.appendChild(s);
-    await new Promise(r => setTimeout(r, 100));
+    await new Promise(r => setTimeout(r, 1000));
   }
 }
 
