@@ -5,6 +5,7 @@ const { Telegraf, Markup } = require('telegraf');
 const mongoose = require('mongoose');
 const cron = require('node-cron');
 const path = require('path');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -244,6 +245,44 @@ async function getOrCreateUser(userId, userName = 'ተጫዋች') {
     return user;
 }
 
+
+// --- 🔐 Mini App / Admin Panel helpers ---
+const ADMIN_PANEL_PASSWORD = process.env.ADMIN_PANEL_PASSWORD || '';
+const ADMIN_PANEL_SECRET = process.env.ADMIN_PANEL_SECRET || 'change-this-admin-panel-secret';
+const ADMIN_PANEL_TOKEN_TTL = 12 * 60 * 60 * 1000;
+
+function createAdminToken(adminId) {
+    const payload = `${Number(adminId)}.${Date.now()}`;
+    const sig = crypto.createHmac('sha256', ADMIN_PANEL_SECRET).update(payload).digest('hex');
+    return Buffer.from(`${payload}.${sig}`).toString('base64url');
+}
+
+function verifyAdminToken(token) {
+    try {
+        const raw = Buffer.from(String(token || ''), 'base64url').toString('utf8');
+        const parts = raw.split('.');
+        if (parts.length !== 3) return null;
+        const [adminId, issuedAt, sig] = parts;
+        const payload = `${adminId}.${issuedAt}`;
+        const expected = crypto.createHmac('sha256', ADMIN_PANEL_SECRET).update(payload).digest('hex');
+        if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
+        if (Date.now() - Number(issuedAt) > ADMIN_PANEL_TOKEN_TTL) return null;
+        const id = Number(adminId);
+        if (!id || !isAdmin(id)) return null;
+        return id;
+    } catch (e) { return null; }
+}
+
+async function requireAdminPanel(req, res, next) {
+    const adminId = verifyAdminToken((req.headers.authorization || '').replace(/^Bearer\s+/i, ''));
+    if (!adminId) return res.status(401).json({ success: false, message: 'Admin login required' });
+    const admin = await AdminAccount.findOne({ adminId, isActive: true });
+    if (!admin) return res.status(403).json({ success: false, message: 'Admin is inactive' });
+    req.adminId = adminId;
+    req.adminAccount = admin;
+    next();
+}
+
 // --- 🌐 የ FRONT-END Mini App API CONNECTIONS ---
 
 app.get('/api/user/profile', async (req, res) => {
@@ -270,6 +309,8 @@ app.get('/api/user/profile', async (req, res) => {
             return res.status(404).json({ success: false, message: 'ተጫዋች አልተገኘም' });
         }
 
+        const assignedAdminId = user.assignedAdminId || OWNER_ID;
+        const assignedAdmin = await AdminAccount.findOne({ adminId: assignedAdminId, isActive: true });
         return res.json({
             success: true,
             user: {
@@ -279,7 +320,8 @@ app.get('/api/user/profile', async (req, res) => {
                 dailyWins: user.dailyWins || 0,
                 level: user.level || 1,
                 wins: user.wins || 0,
-                totalGames: user.totalGames || 0
+                totalGames: user.totalGames || 0,
+                assignedAdmin: assignedAdmin ? { adminId: assignedAdmin.adminId, adminName: assignedAdmin.adminName, telebirr: assignedAdmin.telebirr, cbeAccount: assignedAdmin.cbeAccount } : null
             }
         });
     } catch (error) {
@@ -324,98 +366,203 @@ app.post('/api/bingo/timeout', async (req, res) => {
 
 app.post('/api/bingo/pick', async (req, res) => {
     try {
-        const { userId, cost, number } = req.body;
-        if (!userId || !cost || !number) {
-            return res.status(400).json({ success: false, message: 'ያልተሟላ መረጃ!' });
+        const userId = Number(req.body.userId);
+        const cost = Number(req.body.cost);
+        const number = Number(req.body.number);
+        const allowedCosts = [10, 20, 50, 100];
+        if (!userId || !allowedCosts.includes(cost) || !Number.isInteger(number) || number < 1 || number > 75) {
+            return res.status(400).json({ success: false, message: 'የBingo መረጃ ትክክል አይደለም' });
         }
 
-        let user = await User.findOne({ userId: Number(userId) });
-        if (!user || (!isAdmin(userId) && user.balance < Number(cost))) {
-            return res.status(400).json({ success: false, message: 'በቂ ባላንስ የለዎትም!' });
+        const user = await User.findOne({ userId });
+        if (!user) return res.status(404).json({ success: false, message: 'ተጠቃሚ አልተገኘም' });
+        if (!isAdmin(userId) && Number(user.balance) < cost) {
+            return res.status(400).json({ success: false, message: `በቂ ባላንስ የለዎትም። ETB ${cost} ያስፈልጋል።` });
         }
 
-        let gameId = waitingRoom[cost]?.gameId || ('wait_' + cost + '_' + Date.now());
-        let existing = await TakenNumber.findOne({ gameId, number: Number(number) });
-        if (existing) {
-            return res.status(400).json({ success: false, message: 'ይህ ቁጥር ተይዟል!' });
+        // Same stake = same waiting room. A new room is created only after the previous one starts/cancels.
+        if (!waitingRoom[cost]) {
+            const gameId = `wait_${cost}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            waitingRoom[cost] = { gameId, cost, players: [], startedAt: Date.now() };
+            await BingoGame.create({ gameId, cost, status: 'waiting', players: [] });
         }
 
-        await TakenNumber.create({ gameId, number: Number(number), userId: Number(userId), userName: user.userName });
+        const room = waitingRoom[cost];
+        if (room.players.some(p => p.userId === userId)) {
+            return res.status(409).json({ success: false, message: 'በዚህ stake ጨዋታ ቀድሞውኑ ገብተዋል', gameId: room.gameId });
+        }
 
+        const existing = await TakenNumber.findOne({ gameId: room.gameId, number });
+        if (existing) return res.status(409).json({ success: false, message: 'ይህ ቁጥር ተይዟል። ሌላ ይምረጡ።' });
+
+        await TakenNumber.create({ gameId: room.gameId, number, userId, userName: user.userName });
         if (!isAdmin(userId)) {
-            user.balance -= Number(cost);
-            user.totalGames += 1;
+            user.balance -= cost;
+            user.totalGames = (user.totalGames || 0) + 1;
             await user.save();
         }
 
-        let matrix = generateRandomBingoCard();
-        if (!waitingRoom[cost]) {
-            waitingRoom[cost] = { gameId, players: [] };
-        }
-
-        let isFirstInRoom = waitingRoom[cost].players.length === 0;
-        let dispNum = getFormattedBingoNumber(Number(number));
-
-        waitingRoom[cost].players.push({
-            userId: Number(userId),
-            matrix,
-            cost: Number(cost),
-            pickedNum: dispNum,
-            fromMiniApp: true
-        });
-
-        await BingoGame.findOneAndUpdate(
-            { gameId },
-            { $set: { gameId, cost: Number(cost), status: 'waiting' }, $push: { players: Number(userId) } },
-            { upsert: true, new: true }
-        );
-
-        if (isFirstInRoom) {
-            runBingoQueue(cost, gameId);
-        }
+        const matrix = generateRandomBingoCard();
+        room.players.push({ userId, matrix, cost, pickedNum: getFormattedBingoNumber(number), fromMiniApp: true });
+        await BingoGame.findOneAndUpdate({ gameId: room.gameId }, { $push: { players: userId } });
+        if (room.players.length === 1) runBingoQueue(cost, room.gameId);
 
         return res.json({
             success: true,
-            gameId,
+            gameId: room.gameId,
+            cost,
             matrix,
-            newBalance: user.balance,
-            message: 'ቁጥሩ በተሳካ ሁኔታ ተመርጧል'
+            playersCount: room.players.length,
+            pool: room.players.length * cost,
+            remainingSeconds: Math.max(0, 30 - Math.floor((Date.now() - room.startedAt) / 1000)),
+            newBalance: Number(user.balance) || 0,
+            message: `ETB ${cost} የBingo ጨዋታ ውስጥ ገብተዋል`
         });
     } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
+        console.error('Mini App Bingo pick error:', err);
+        res.status(500).json({ success: false, message: 'Server error', error: err.message });
     }
 });
 
 app.get('/api/bingo/status', async (req, res) => {
     try {
-        const { userId, gameId } = req.query;
-        let userGame = activeGames[userId];
+        const userId = Number(req.query.userId);
+        const gameId = req.query.gameId;
+        const userGame = activeGames[userId];
 
         if (userGame) {
-            let session = roomSessions[userGame.gameId];
+            const session = roomSessions[userGame.gameId];
+            if (!session) return res.json({ success: true, status: 'none' });
             return res.json({
                 success: true,
                 status: 'active',
-                currentBall: session ? getFormattedBingoNumber(session.drawnNumber) : '--',
-                history: session ? session.drawnHistory.map(n => getFormattedBingoNumber(n)) : [],
-                matrix: userGame.matrix
+                gameId: userGame.gameId,
+                cost: session.cost,
+                playersCount: session.roomPlayers.length,
+                pool: session.totalPool,
+                currentBall: session.drawnNumber ? getFormattedBingoNumber(session.drawnNumber) : '--',
+                history: session.drawnHistory.map(n => getFormattedBingoNumber(n)),
+                matrix: userGame.matrix,
+                nextDrawInSeconds: session.nextDrawAt ? Math.max(0, Math.ceil((session.nextDrawAt - Date.now()) / 1000)) : 6
             });
         }
 
-        let waiting = Object.values(waitingRoom).find(r => r.gameId === gameId);
+        let waiting = null;
+        if (gameId) waiting = Object.values(waitingRoom).find(r => r.gameId === gameId);
+        if (!waiting && userId) waiting = Object.values(waitingRoom).find(r => r.players.some(p => p.userId === userId));
         if (waiting) {
             return res.json({
                 success: true,
                 status: 'waiting',
+                gameId: waiting.gameId,
+                cost: waiting.cost,
                 playersCount: waiting.players.length,
-                pool: waiting.players.length * (waiting.players[0]?.cost || 10)
+                pool: waiting.players.length * waiting.cost,
+                remainingSeconds: Math.max(0, 30 - Math.floor((Date.now() - waiting.startedAt) / 1000)),
+                pickedNumbers: waiting.players.map(p => p.pickedNum)
             });
         }
-
         return res.json({ success: true, status: 'none' });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
+});
+
+app.post('/api/bingo/timeout', async (req, res) => {
+    try {
+        const userId = Number(req.body.userId);
+        const gameId = req.body.gameId;
+        const waiting = Object.values(waitingRoom).find(r => r.gameId === gameId);
+        if (!waiting) return res.json({ success: false, message: 'Game not found' });
+        if (waiting.players.length >= 2) return res.json({ success: false, message: 'Game already started' });
+        const player = waiting.players.find(p => p.userId === userId);
+        if (!player) return res.json({ success: false, message: 'Player not found' });
+        clearBingoWaitingRoom(gameId, waiting.cost);
+        const user = await User.findOne({ userId });
+        if (user && !isAdmin(userId)) {
+            user.balance += waiting.cost;
+            user.totalGames = Math.max(0, (user.totalGames || 0) - 1);
+            await user.save();
+        }
+        await BingoGame.findOneAndUpdate({ gameId }, { status: 'cancelled' });
+        await TakenNumber.deleteMany({ gameId });
+        return res.json({ success: true, newBalance: user ? user.balance : 0 });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+app.get('/api/user/payment-admin', async (req, res) => {
+    try {
+        const userId = Number(req.query.userId);
+        if (!userId) return res.status(400).json({ success: false, message: 'Invalid user ID' });
+        let user = await User.findOne({ userId });
+        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+        user = await assignAdminToUser(user);
+        const assignedAdminId = user.assignedAdminId || OWNER_ID;
+        const admin = await AdminAccount.findOne({ adminId: assignedAdminId, isActive: true });
+        if (!admin) return res.status(404).json({ success: false, message: 'Assigned admin not found' });
+        return res.json({ success: true, admin: { adminId: admin.adminId, adminName: admin.adminName, telebirr: admin.telebirr || '', cbeAccount: admin.cbeAccount || '' } });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+
+app.post('/api/admin/login', async (req, res) => {
+    try {
+        const adminId = Number(req.body.adminId);
+        const password = String(req.body.password || '');
+        if (!ADMIN_PANEL_PASSWORD) return res.status(503).json({ success: false, message: 'ADMIN_PANEL_PASSWORD is not configured on server' });
+        if (!adminId || password !== ADMIN_PANEL_PASSWORD || !isAdmin(adminId)) return res.status(401).json({ success: false, message: 'Invalid admin credentials' });
+        const admin = await AdminAccount.findOne({ adminId, isActive: true });
+        if (!admin) return res.status(403).json({ success: false, message: 'Admin is inactive' });
+        return res.json({ success: true, token: createAdminToken(adminId), admin: { adminId: admin.adminId, adminName: admin.adminName, telebirr: admin.telebirr, cbeAccount: admin.cbeAccount, isOwner: isOwner(adminId) } });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+app.get('/api/admin/me', requireAdminPanel, async (req, res) => {
+    res.json({ success: true, admin: { adminId: req.adminAccount.adminId, adminName: req.adminAccount.adminName, telebirr: req.adminAccount.telebirr, cbeAccount: req.adminAccount.cbeAccount, isOwner: isOwner(req.adminId) } });
+});
+
+app.get('/api/admin/requests', requireAdminPanel, async (req, res) => {
+    const filter = isOwner(req.adminId) ? {} : { assignedAdminId: req.adminId };
+    const requests = await RequestModel.find(filter).sort({ date: -1 }).limit(100).lean();
+    res.json({ success: true, requests });
+});
+
+app.get('/api/admin/players', requireAdminPanel, async (req, res) => {
+    const filter = isOwner(req.adminId) ? {} : { assignedAdminId: req.adminId };
+    const players = await User.find(filter).sort({ _id: -1 }).limit(200).select('userId userName phone balance assignedAdminId totalGames wins dailyWins level').lean();
+    res.json({ success: true, players });
+});
+
+app.post('/api/admin/requests/:id/approve', requireAdminPanel, async (req, res) => {
+    try {
+        const request = await RequestModel.findById(req.params.id);
+        if (!request) return res.status(404).json({ success: false, message: 'Request not found' });
+        if (!isOwner(req.adminId) && request.assignedAdminId !== req.adminId) return res.status(403).json({ success: false, message: 'Not assigned to this admin' });
+        const user = await getOrCreateUser(request.userId);
+        if (request.type === 'deposit') {
+            user.balance += Number(request.amount);
+            await user.save();
+        }
+        await RequestModel.findByIdAndDelete(request._id);
+        bot.telegram.sendMessage(request.userId, `🎉 የ ${request.amount} ETB የ${request.type === 'deposit' ? 'ዲፖዚት' : 'ዊዝድሮ'} ጥያቄዎ ጸድቋል! 💰`).catch(() => {});
+        res.json({ success: true, message: 'Approved', balance: user.balance });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+app.post('/api/admin/requests/:id/reject', requireAdminPanel, async (req, res) => {
+    try {
+        const request = await RequestModel.findById(req.params.id);
+        if (!request) return res.status(404).json({ success: false, message: 'Request not found' });
+        if (!isOwner(req.adminId) && request.assignedAdminId !== req.adminId) return res.status(403).json({ success: false, message: 'Not assigned to this admin' });
+        if (request.type === 'withdraw') {
+            const user = await getOrCreateUser(request.userId);
+            user.balance += Number(request.amount);
+            await user.save();
+        }
+        await RequestModel.findByIdAndDelete(request._id);
+        bot.telegram.sendMessage(request.userId, `❌ የ ${request.type.toUpperCase()} ጥያቄዎ ውድቅ ተደርጓል።`).catch(() => {});
+        res.json({ success: true, message: 'Rejected' });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
 app.post('/api/deposit', async (req, res) => {
@@ -937,7 +1084,7 @@ bot.action(/play_(\d+)/, async (ctx) => {
     
     let waitingGameId = 'wait_' + cost + '_' + Date.now();
     if (!waitingRoom[cost]) {
-        waitingRoom[cost] = { gameId: waitingGameId, players: [] };
+        waitingRoom[cost] = { gameId: waitingGameId, cost, players: [], startedAt: Date.now() };
     }
 
     await BingoGame.create({
@@ -992,7 +1139,7 @@ bot.action(/b_pick_(.+)_(\d+)/, async (ctx) => {
 
         let matrix = generateRandomBingoCard();
         if (!waitingRoom[cost] || !waitingRoom[cost].players) {
-            waitingRoom[cost] = { gameId, players: [] };
+            waitingRoom[cost] = { gameId, cost: Number(cost), players: [], startedAt: Date.now() };
         }
 
         let isFirstInRoom = waitingRoom[cost].players.length === 0;
@@ -1024,8 +1171,14 @@ bot.action(/b_pick_(.+)_(\d+)/, async (ctx) => {
     }
 });
 
+
+function clearBingoWaitingRoom(gameId, cost) {
+    if (waitingRoom[cost]?.gameId === gameId) delete waitingRoom[cost];
+}
+
 function runBingoQueue(cost, gameId) {
-    let countdown = 30;
+    const startedAt = waitingRoom[cost]?.startedAt || Date.now();
+    let countdown = Math.max(0, 30 - Math.floor((Date.now() - startedAt) / 1000));
 
     let countdownInterval = setInterval(async () => {
         countdown--;
@@ -1101,6 +1254,7 @@ function runBingoQueue(cost, gameId) {
                 drawnHistory,
                 availableNumbers,
                 drawnNumber: null,
+                nextDrawAt: Date.now() + 6000,
                 gameActive: true
             };
 
@@ -1127,6 +1281,7 @@ function runBingoQueue(cost, gameId) {
                 let newNum = session.availableNumbers.splice(Math.floor(Math.random() * session.availableNumbers.length), 1)[0];
                 session.drawnNumber = newNum;
                 session.drawnHistory.push(newNum);
+                session.nextDrawAt = Date.now() + 6000;
 
                 let formattedHist = session.drawnHistory.map(n => getFormattedBingoNumber(n)).join(', ');
                 let formattedCurrent = getFormattedBingoNumber(newNum);
@@ -1458,32 +1613,16 @@ bot.hears('👤 ፕሮፋይል (Profile)', async (ctx) => {
     );
 });
 
-// --- 💬 ኮሜንት (Comment - የተስተካከለ ወደ ተመደበበት አድሚን ቴሌግራም ሊንክ የሚወስድ) ---
-bot.hears('💬 ኮሜንት (Comment)', async (ctx) => {
+bot.hears('💬 ኮሜንት (Comment)', (ctx) => {
     const userId = ctx.from.id;
-    let user = await getOrCreateUser(userId);
-    user = await assignAdminToUser(user);
-
-    let targetAdminId = user.assignedAdminId || OWNER_ID;
-    let adminAccount = await AdminAccount.findOne({ adminId: targetAdminId });
-    
-    // የተመደበው አድሚን ዩዘርኔም ከሌለው በ Owner ID (በTelegram tg://user?id=) ሊንክ ይመራል
-    let adminLink = `tg://user?id=${targetAdminId}`;
-
-    ctx.reply(
-        `💬 **አስተያየት ወይም ጥያቄ አለዎት?**\n\n` +
-        `እባክዎ ከታች ያለውን አዝራር በመጫን በቀጥታ ከተመደበው አድሚን ጋር ይነጋገሩ፦`,
-        Markup.inlineKeyboard([
-            [Markup.button.url('💬 አድሚንን ማነጋገር (Contact Admin)', adminLink)],
-            [Markup.button.callback('🔙 ወደ ዋናው ሜኑ', 'back_to_main_menu')]
-        ])
-    );
+    userSteps[userId] = { action: 'comment_waiting' };
+    ctx.reply(`💬 ለአድሚን ማስተላለፍ የሚፈልጉትን **አስተያየት፣ ጥያቄ ወይም ስክሪንሾት ፎቶ** ይላኩ፦`);
 });
 
 bot.hears('📖 መመሪያ (Instructions)', (ctx) => {
     ctx.reply(
         `📖 **የጨዋታዎች አጨዋወት መመሪያ**\n\n` +
-        `1. ዲፖዚት በመጫን ገንዘብ ገቢ በማድረግ የትራንዛክሽን መረጃውን ይላቁ።\n` +
+        `1. ዲፖዚት በመጫን ገንዘብ ገቢ በማድረግ የትራንዛክሽን መረጃውን ይላኩ።\n` +
         `2. ፕለይ በመጫን **ቢንጎ** ወይም **ኬኖ** መጫወት ይችላሉ።\n` +
         `3. በየቀኑ ቢያንስ 3 ጊዜ በማሸነፍ ወደ ሳምንታዊው **የአሸናፊዎች አሸናፊ** ቶርናመንት ይቀላቀሉ!`
     );
@@ -1686,6 +1825,7 @@ bot.hears('💬 የተጫዋቾች ኮሜንቶች', async (ctx) => {
     
     for (let c of comments) {
         let replyStatus = c.adminReply ? `\n✅ **ምላሽ:** ${c.adminReply}` : `\n❌ ምላሽ አልተሰጠበትም`;
+        // የተስተካከለው የ userId ስህተት ወደ c.userId ተቀይሯል
         let msg = `📌 **ከ:** ${c.userName} (ID: \`${c.userId}\`)\n💬 **መልእክት:** "${c.message}"${replyStatus}`;
         let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ', `reply_comment_${c._id}`)]]);
         
@@ -1901,6 +2041,29 @@ bot.on('photo', async (ctx) => {
 
         return ctx.reply(`✅ የምላሽ ፎቶ ተልኳል!`);
     }
+
+    if (userSteps[userId] && userSteps[userId].action === 'comment_waiting') {
+        let messageText = ctx.message.caption || 'ፎቶ';
+        delete userSteps[userId];
+
+        let userDoc = await User.findOne({ userId });
+        let assignedAdminId = userDoc?.assignedAdminId || OWNER_ID;
+
+        let newComment = new CommentModel({ 
+            userId, 
+            assignedAdminId,
+            userName, 
+            message: messageText, 
+            photoId 
+        });
+        await newComment.save();
+
+        ctx.reply(`✅ ፎቶዎ ለአድሚን ተልኳል!`, mainKeyboard);
+
+        let adminMsg = `📌 **አዲስ የኮሜንት ፎቶ መጣ!**\n\n👤 **ከ:** ${userName} (ID: \`${userId}\`)`;
+        let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ', `reply_comment_${newComment._id}`)]]);
+        return bot.telegram.sendPhoto(assignedAdminId, photoId, { caption: adminMsg, parse_mode: 'Markdown', ...replyBtn }).catch(()=>{});
+    }
 });
 
 bot.on('text', async (ctx) => {
@@ -2055,6 +2218,27 @@ bot.on('text', async (ctx) => {
 
             bot.telegram.sendMessage(assignedAdminId, adminMsg, { parse_mode: 'Markdown', ...adminKeyboard }).catch(()=>{});
             return;
+        }
+
+        if (userSteps[userId]?.action === 'comment_waiting') {
+            delete userSteps[userId];
+
+            let userDoc = await User.findOne({ userId });
+            let assignedAdminId = userDoc?.assignedAdminId || OWNER_ID;
+
+            let newComment = new CommentModel({ 
+                userId, 
+                assignedAdminId,
+                userName: ctx.from.first_name, 
+                message: text 
+            });
+            await newComment.save();
+
+            ctx.reply(`✅ አስተያየትዎ ለአድሚን ተልኳል!`, mainKeyboard);
+
+            let adminMsg = `📌 **አዲስ አስተያየት (Comment) መጣ!**\n\n👤 **ከ:** ${ctx.from.first_name} (ID: \`${userId}\`)\n💬 **መልእክት:** "${text}"`;
+            let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ', `reply_comment_${newComment._id}`)]]);
+            return bot.telegram.sendMessage(assignedAdminId, adminMsg, { parse_mode: 'Markdown', ...replyBtn }).catch(()=>{});
         }
     }
 });
