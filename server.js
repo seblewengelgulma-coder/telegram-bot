@@ -1780,9 +1780,14 @@ bot.hears('📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', async (ctx) => {
         let keyboard = Markup.inlineKeyboard([
             [Markup.button.callback('✅ አጽድቅ', `approve_req_${r._id}`), Markup.button.callback('❌ ውድቅ አድርግ', `reject_req_${r._id}`)]
         ]);
-        
-        if (r.photoId) {
-            await ctx.replyWithPhoto(r.photoId, { caption: msg, parse_mode: 'Markdown', ...keyboard });
+       if (r.photoId && typeof r.photoId === 'string' && r.photoId.trim().length > 5) {
+            try {
+                await ctx.replyWithPhoto(r.photoId.trim(), { caption: msg, parse_mode: 'Markdown', ...keyboard });
+            } catch (photoErr) {
+                console.error('Photo send failed, falling back to text:', photoErr.message);
+                // ፎቶው መላክ ካልቻለ ስህተቱን ችላ ብሎ በጽሁፍ ብቻ እንዲልክ ማድረግ
+                await ctx.reply(msg, { parse_mode: 'Markdown', ...keyboard });
+            }
         } else {
             await ctx.reply(msg, { parse_mode: 'Markdown', ...keyboard });
         }
