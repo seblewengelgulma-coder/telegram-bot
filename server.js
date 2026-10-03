@@ -21,7 +21,7 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// 👉 ለ Mini App የሚሆን የስታቲክ ፋይሎች ማቀናበሪያ (Public ፎልደር ካለዎት ወይም ሰርቨሩ 'Cannot GET /' እንዳይል)
+// 👉 ለ Mini App የሚሆን የስታቲክ ፋይሎች ማቀናበሪያ
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
@@ -252,7 +252,6 @@ async function getOrCreateUser(userId, userName = 'ተጫዋች') {
     return user;
 }
 
-
 // --- 🔐 Mini App / Admin Panel helpers ---
 const ADMIN_PANEL_PASSWORD = process.env.ADMIN_PANEL_PASSWORD || '';
 const ADMIN_PANEL_SECRET = process.env.ADMIN_PANEL_SECRET || 'change-this-admin-panel-secret';
@@ -395,13 +394,18 @@ app.post('/api/bingo/pick', async (req, res) => {
 
         const room = waitingRoom[cost];
         if (room.players.some(p => p.userId === userId)) {
-            return res.status(409).json({ success: false, message: 'በዚህ stake ጨዋታ ቀድሞውኑ ገብተዋል', gameId: room.gameId });
+            return res.path(409).json({ success: false, message: 'በዚህ stake ጨዋታ ቀድሞውኑ ገብተዋል', gameId: room.gameId });
         }
 
-        const existing = await TakenNumber.findOne({ gameId: room.gameId, number });
-        if (existing) return res.status(409).json({ success: false, message: 'ይህ ቁጥር ተይዟል። ሌላ ይምረጡ።' });
+        try {
+            await TakenNumber.create({ gameId: room.gameId, number, userId, userName: user.userName });
+        } catch (dbErr) {
+            if (dbErr.code === 11000) {
+                return res.status(409).json({ success: false, message: 'ይህ ቁጥር ተይዟል። ሌላ ይምረጡ።' });
+            }
+            throw dbErr;
+        }
 
-        await TakenNumber.create({ gameId: room.gameId, number, userId, userName: user.userName });
         if (!isAdmin(userId)) {
             user.balance -= cost;
             user.totalGames = (user.totalGames || 0) + 1;
@@ -484,10 +488,9 @@ app.get('/api/user/payment-admin', async (req, res) => {
         const assignedAdminId = user.assignedAdminId || OWNER_ID;
         const admin = await AdminAccount.findOne({ adminId: assignedAdminId, isActive: true });
         if (!admin) return res.status(404).json({ success: false, message: 'Assigned admin not found' });
-        return res.json({ success: true, admin: { adminId: admin.adminId, adminName: admin.adminName, telebirr: admin.telebirr || '', cbeAccount: admin.cbeAccount || '' } });
+        return res.json({ success: true, admin: { adminId: admin.adminId, adminName: admin.adminName, telebirr: admin.telebirr, cbeAccount: admin.cbeAccount || '' } });
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
-
 
 app.post('/api/admin/login', async (req, res) => {
     try {
@@ -984,7 +987,7 @@ bot.command('addadmin', (ctx) => {
         subAdmins.push(targetId);
         return ctx.reply(`✅ ዩዘር ID \`${targetId}\` ያለው አዲስ ረዳት አድሚን ተጨምሯል!`, { parse_mode: 'Markdown' });
     }
-    ctx.reply('⚠️️ እባክዎ ትክክለኛ ID ያስገቡ። ምሳሌ፦ `/addadmin 123456789`');
+    ctx.reply('⚠ እባክዎ ትክክለኛ ID ያስገቡ። ምሳሌ፦ `/addadmin 123456789`');
 });
 
 bot.command('removeadmin', (ctx) => {
@@ -1106,14 +1109,16 @@ bot.action(/b_pick_(.+)_(\d+)/, async (ctx) => {
     }
 
     try {
-        let existing = await TakenNumber.findOne({ gameId, number: num });
-        if (existing) {
-            let updatedKb = await getBingo1to75Keyboard(gameId);
-            await ctx.editMessageText(`⚠️ ይህ ቁጥር አሁን በሌላ ተጫዋች ተይዟል!`, updatedKb);
-            return ctx.answerCbQuery(`❌ ቁጥሩ ተይዟል!`, { show_alert: true });
+        try {
+            await TakenNumber.create({ gameId, number: num, userId, userName });
+        } catch (dbErr) {
+            if (dbErr.code === 11000) {
+                let updatedKb = await getBingo1to75Keyboard(gameId);
+                await ctx.editMessageText(`⚠️ ይህ ቁጥር አሁን በሌላ ተጫዋች ተይዟል!`, updatedKb);
+                return ctx.answerCbQuery(`❌ ቁጥሩ ተይዟል!`, { show_alert: true });
+            }
+            throw dbErr;
         }
-
-        await TakenNumber.create({ gameId, number: num, userId, userName });
 
         if (!isAdmin(userId)) {
             user.balance -= cost;
@@ -1154,11 +1159,6 @@ bot.action(/b_pick_(.+)_(\d+)/, async (ctx) => {
         return ctx.answerCbQuery(`❌ ስህተት ተፈጥሯል!`, { show_alert: true });
     }
 });
-
-
-function clearBingoWaitingRoom(gameId, cost) {
-    if (waitingRoom[cost]?.gameId === gameId) delete waitingRoom[cost];
-}
 
 function runBingoQueue(cost, gameId) {
     const startedAt = waitingRoom[cost]?.startedAt || Date.now();
@@ -1537,7 +1537,7 @@ bot.action('back_to_main_menu', (ctx) => {
     ]));
 });
 
-// --- 💰 ዲፖዚት (Deposit Handler - በትራንዛክሽን ሊንክ ወይም ቴክስት) ---
+// --- 💰 ዲፖዚት (Deposit Handler) ---
 bot.hears('💰 ዲፖዚት (Deposit)', async (ctx) => {
     const userId = ctx.from.id;
     let user = await getOrCreateUser(userId);
@@ -1566,7 +1566,7 @@ bot.hears('💳 ዊዝድሮ (Withdraw)', async (ctx) => {
     
     if (!user.phone) {
         return ctx.reply(
-            `⚠️️ የዊዝድሮ ጥያቄ ከማቅረብዎ በፊት ስልክ ቁጥርዎ መመዝገብ አለበት።`,
+            `⚠ የዊዝድሮ ጥያቄ ከማቅረብዎ በፊት ስልክ ቁጥርዎ መመዝገብ አለበት።`,
             Markup.keyboard([[Markup.button.contactRequest('📱 ስልክ ቁጥር አጋራ (Share Contact)')]]).resize()
         );
     }
@@ -1710,7 +1710,7 @@ async function sendAdminList(ctx, page = 1) {
 
     let navButtons = [];
     if (page > 1) {
-        navButtons.push(Markup.button.callback('⬅️️ Prev (ቀደመው)', `admins_page_${page - 1}`));
+        navButtons.push(Markup.button.callback('⬅ Prev (ቀደመው)', `admins_page_${page - 1}`));
     }
     if (page < totalPages) {
         navButtons.push(Markup.button.callback('Next (ቀጣይ) ➡️', `admins_page_${page + 1}`));
@@ -2193,7 +2193,7 @@ bot.on('text', async (ctx) => {
         ctx.reply(`✅ አስተያየትዎ ለአድሚን ተልኳል!`, mainKeyboard);
 
         let adminMsg = `📌 **አዲስ ኮሜንት መጣ!**\n\n👤 **ከ:** ${ctx.from.first_name || 'ተጫዋች'} (ID: \`${userId}\`)\n💬 **መልእክት:** "${messageText}"`;
-        let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️️ ምላሽ ስጥ', `reply_comment_${newComment._id}`)]]);
+        let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍ ምላሽ ስጥ', `reply_comment_${newComment._id}`)]]);
         return bot.telegram.sendMessage(assignedAdminId, adminMsg, { parse_mode: 'Markdown', ...replyBtn }).catch(()=>{});
     }
 });
