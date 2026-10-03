@@ -21,6 +21,13 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// 👉 ለ Mini App የሚሆን የስታቲክ ፋይሎች ማቀናበሪያ (Public ፎልደር ካለዎት ወይም ሰርቨሩ 'Cannot GET /' እንዳይል)
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/', (req, res) => {
+    res.send('🤖 Telegram Bot & Mini App Server is running successfully!');
+});
+
 // --- 1. የሞንጎዲቢ ግንኙነት (MongoDB Connection) ---
 const MONGO_URI = process.env.MONGO_URI;
 
@@ -977,7 +984,7 @@ bot.command('addadmin', (ctx) => {
         subAdmins.push(targetId);
         return ctx.reply(`✅ ዩዘር ID \`${targetId}\` ያለው አዲስ ረዳት አድሚን ተጨምሯል!`, { parse_mode: 'Markdown' });
     }
-    ctx.reply('⚠️ እባክዎ ትክክለኛ ID ያስገቡ። ምሳሌ፦ `/addadmin 123456789`');
+    ctx.reply('⚠️️ እባክዎ ትክክለኛ ID ያስገቡ። ምሳሌ፦ `/addadmin 123456789`');
 });
 
 bot.command('removeadmin', (ctx) => {
@@ -1559,7 +1566,7 @@ bot.hears('💳 ዊዝድሮ (Withdraw)', async (ctx) => {
     
     if (!user.phone) {
         return ctx.reply(
-            `⚠️ የዊዝድሮ ጥያቄ ከማቅረብዎ በፊት ስልክ ቁጥርዎ መመዝገብ አለበት።`,
+            `⚠️️ የዊዝድሮ ጥያቄ ከማቅረብዎ በፊት ስልክ ቁጥርዎ መመዝገብ አለበት።`,
             Markup.keyboard([[Markup.button.contactRequest('📱 ስልክ ቁጥር አጋራ (Share Contact)')]]).resize()
         );
     }
@@ -1703,7 +1710,7 @@ async function sendAdminList(ctx, page = 1) {
 
     let navButtons = [];
     if (page > 1) {
-        navButtons.push(Markup.button.callback('⬅️ Prev (ቀደመው)', `admins_page_${page - 1}`));
+        navButtons.push(Markup.button.callback('⬅️️ Prev (ቀደመው)', `admins_page_${page - 1}`));
     }
     if (page < totalPages) {
         navButtons.push(Markup.button.callback('Next (ቀጣይ) ➡️', `admins_page_${page + 1}`));
@@ -1785,7 +1792,6 @@ bot.hears('📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', async (ctx) => {
                 await ctx.replyWithPhoto(r.photoId.trim(), { caption: msg, parse_mode: 'Markdown', ...keyboard });
             } catch (photoErr) {
                 console.error('Photo send failed, falling back to text:', photoErr.message);
-                // ፎቶው መላክ ካልቻለ ስህተቱን ችላ ብሎ በጽሁፍ ብቻ እንዲልክ ማድረግ
                 await ctx.reply(msg, { parse_mode: 'Markdown', ...keyboard });
             }
         } else {
@@ -2051,7 +2057,6 @@ bot.on('text', async (ctx) => {
     const userId = ctx.from.id;
     const text = ctx.message.text.trim();
 
-    // 1. ዲፖዚት ሲያደርጉ የብር መጠን መቀበል
     if (userSteps[userId] && userSteps[userId].action === 'deposit_amount') {
         const amount = parseFloat(text);
         if (isNaN(amount) || amount <= 0) {
@@ -2061,7 +2066,6 @@ bot.on('text', async (ctx) => {
         return ctx.reply(`🔗 እባክዎ የቴሌብር **ትራንዛክሽን ሊንክ ወይም መረጃ (Transaction Link / Details)** ኮፒ አድርገው ይላኩን:`, { parse_mode: 'Markdown' });
     }
 
-    // 2. የቴሌብር ትራንዛክሽን ሊንክ መቀበልና ለአድሚን መላክ
     if (userSteps[userId] && userSteps[userId].action === 'deposit_transaction') {
         const amount = userSteps[userId].amount;
         delete userSteps[userId];
@@ -2087,7 +2091,6 @@ bot.on('text', async (ctx) => {
         return ctx.reply(`✅ የዲፖዚት ጥያቄዎ እና የትራንዛክሽን መረጃው ለአድሚን ተልኳል። አድሚኑ ሲያረጋግጠው ባላንስዎ ይስተካከላል!`, mainKeyboard);
     }
 
-    // 3. ዊዝድሮ የብር መጠን መቀበል
     if (userSteps[userId] && userSteps[userId].action === 'withdraw_amount') {
         const amount = parseFloat(text);
         if (isNaN(amount) || amount <= 0) {
@@ -2190,7 +2193,7 @@ bot.on('text', async (ctx) => {
         ctx.reply(`✅ አስተያየትዎ ለአድሚን ተልኳል!`, mainKeyboard);
 
         let adminMsg = `📌 **አዲስ ኮሜንት መጣ!**\n\n👤 **ከ:** ${ctx.from.first_name || 'ተጫዋች'} (ID: \`${userId}\`)\n💬 **መልእክት:** "${messageText}"`;
-        let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ', `reply_comment_${newComment._id}`)]]);
+        let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️️ ምላሽ ስጥ', `reply_comment_${newComment._id}`)]]);
         return bot.telegram.sendMessage(assignedAdminId, adminMsg, { parse_mode: 'Markdown', ...replyBtn }).catch(()=>{});
     }
 });
