@@ -1630,12 +1630,13 @@ bot.hears('📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', async (ctx) => {
         let keyboard = Markup.inlineKeyboard([
             [Markup.button.callback('✅ አጽድቅ', `approve_req_${r._id}`), Markup.button.callback('❌ ውድቅ አድርግ', `reject_req_${r._id}`)]
         ]);
-        if (r.photoId) {
-            await ctx.replyWithPhoto(r.photoId, { caption: msg, parse_mode: 'Markdown', ...keyboard });
-        } else {
-            await ctx.reply(msg, { parse_mode: 'Markdown', ...keyboard });
-        }
-    }
+       if (r.photoId && msg.length <= 1024) {
+    await ctx.replyWithPhoto(r.photoId, { caption: msg, parse_mode: 'Markdown', ...keyboard });
+} else {
+    // ጽሁፉ ከ 1024 በላይ ከሆነ ወይም ፎቶ ከሌለ በጽሁፍ መልክ ይልካል 
+    // (እጅግ ረጅም ከሆነ ደግሞ ለሁለት ከፍሎ መላክ ሊያስፈልግ ይችላል)
+    await ctx.reply(msg, { parse_mode: 'Markdown', ...keyboard });
+}
 });
 
 bot.hears('💬 የተጫዋቾች ኮሜንቶች', async (ctx) => {
