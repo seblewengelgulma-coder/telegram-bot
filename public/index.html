@@ -34,7 +34,6 @@
             position: relative;
         }
 
-        /* 3D Motion Animated Background */
         .bg-animation {
             position: absolute;
             top: 0;
@@ -73,7 +72,6 @@
             justify-content: space-between;
             align-items: center;
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
-            transform: translateZ(20px);
         }
 
         .user-info h2 {
@@ -96,13 +94,7 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 20px;
             padding: 20px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
-            transform-style: preserve-3d;
-            transition: transform 0.3s ease;
-        }
-
-        .card:hover {
-            transform: translateY(-5px) rotateX(2deg);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
         }
 
         h1, h2, h3 {
@@ -114,7 +106,7 @@
 
         .btn-group {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr;
             gap: 12px;
             margin-top: 15px;
         }
@@ -140,7 +132,6 @@
             border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
-        /* Keno Grid 80 Numbers */
         .keno-grid {
             display: grid;
             grid-template-columns: repeat(8, 1fr);
@@ -168,22 +159,8 @@
             background: #22c55e;
             color: white;
             border-color: #16a34a;
-            box-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
         }
 
-        .keno-cell.drawn {
-            background: #ec4899;
-            color: white;
-            animation: pulse 1s infinite;
-        }
-
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-            100% { transform: scale(1); }
-        }
-
-        /* Bingo Matrix */
         .bingo-grid {
             display: grid;
             grid-template-columns: repeat(5, 1fr);
@@ -218,23 +195,10 @@
             padding: 12px;
             border-radius: 10px;
             background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 20%);
+            border: 1px solid rgba(255, 255, 255, 0.2);
             color: white;
             margin-bottom: 12px;
             outline: none;
-        }
-
-        .matrix-table {
-            width: 100%;
-            font-size: 0.85rem;
-            margin-top: 10px;
-            border-collapse: collapse;
-        }
-
-        .matrix-table th, .matrix-table td {
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 6px;
-            text-align: center;
         }
     </style>
 </head>
@@ -256,7 +220,7 @@
         <div id="main-menu" class="card">
             <h1>🎲 እፉዬ ጨዋታዎች ማዕከል</h1>
             <p>እባክዎ የሚፈልጉትን ጨዋታ በመምረጥ እድልዎን ይሞክሩ!</p>
-            <div class="btn-group" style="grid-template-columns: 1fr;">
+            <div class="btn-group">
                 <button onclick="showGame('bingo')">🎯 ቢንጎ ጨዋታ (Bingo)</button>
                 <button onclick="showGame('keno')">🎲 ኬኖ ጨዋታ (Keno)</button>
                 <button class="secondary" onclick="showWallet()">💰 ዋሌት / ዲፖዚት / ዊዝድሮ</button>
@@ -288,7 +252,7 @@
             <p>ከ 1 እስከ 80 ያሉት ቁጥሮች (ከ 1 እስከ 10 ቁጥሮች ይምረጡ):</p>
             <div style="margin: 10px 0;">
                 <label>የውርርድ መጠን (ETB):</label>
-                <select id="keno-bet" onchange="updateKenoPayout()">
+                <select id="keno-bet">
                     <option value="2">2 ETB</option>
                     <option value="5">5 ETB</option>
                     <option value="10" selected>10 ETB</option>
@@ -323,31 +287,44 @@
     </div>
 
     <script>
+        // የቴሌግራም ዌብ አፕ ማስነሻ
         const tg = window.Telegram.WebApp;
-        tg.expand();
+        try {
+            tg.expand();
+        } catch (e) {
+            console.log("Telegram WebApp not detected");
+        }
 
+        // የተጠቃሚ መረጃ (ቴሌግራም ከሌለ በነባሪ የሚጠቀመው)
         let currentUser = {
             telegramId: tg.initDataUnsafe?.user?.id || 380035906,
             userName: tg.initDataUnsafe?.user?.first_name || 'ተጫዋች',
             balance: 100
         };
 
-        // Fetch Real Profile from Server if available
+        // ** ጠቃሚ ማስታወሻ: ሰርቨርዎ የሚገኝበትን ትክክለኛ አድራሻ (Domain ወይም IP) እዚህ ያስገቡ **
+        // ሰርቨሩ እና ፍሮንትኢንዱ በአንድ ላይ የሚሰሩ ከሆነ ባዶ መተው ይቻላል (Relative path)
+        const API_BASE_URL = ''; 
+
+        // የተጠቃሚውን መረጃ ከሰርቨር ማምጣት
         async function fetchUserProfile() {
             try {
-                let res = await fetch(`/api/user/profile?userId=${currentUser.telegramId}`);
+                let res = await fetch(`${API_BASE_URL}/api/user/profile?userId=${currentUser.telegramId}`);
                 let data = await res.json();
                 if (data.success) {
                     currentUser.balance = data.user.balance;
                     currentUser.userName = data.user.userName;
-                    document.getElementById('username').innerText = currentUser.userName;
-                    document.getElementById('user-id').innerText = `ID: ${currentUser.telegramId}`;
-                    document.getElementById('balance-display').innerText = `ETB ${currentUser.balance}`;
                 }
             } catch (e) {
-                console.log('Using local fallback profile');
+                console.log('Using local fallback profile data due to network error.');
             }
+            // ሁልጊዜም ዩዘርኢንፎን ማሳየት እንዲቻል
+            document.getElementById('username').innerText = currentUser.userName;
+            document.getElementById('user-id').innerText = `ID: ${currentUser.telegramId}`;
+            document.getElementById('balance-display').innerText = `ETB ${currentUser.balance}`;
         }
+
+        // ስክሪኑ ሲከፈት መረጃውን መጫን
         fetchUserProfile();
 
         function showGame(type) {
@@ -371,11 +348,12 @@
             fetchUserProfile();
         }
 
-        /* --- KENO LOGIC & MATRIX --- */
+        /* --- KENO LOGIC --- */
         let selectedKenoNumbers = [];
         function initKenoGrid() {
             const grid = document.getElementById('keno-grid');
             grid.innerHTML = '';
+            selectedKenoNumbers = [];
             for (let i = 1; i <= 80; i++) {
                 let cell = document.createElement('div');
                 cell.className = 'keno-cell';
@@ -383,6 +361,7 @@
                 cell.onclick = () => toggleKenoNumber(i, cell);
                 grid.appendChild(cell);
             }
+            document.getElementById('keno-info').innerText = `የመረጧቸው: 0/10`;
         }
 
         function toggleKenoNumber(num, el) {
@@ -413,7 +392,7 @@
             }
 
             try {
-                let res = await fetch('/api/keno/play', {
+                let res = await fetch(`${API_BASE_URL}/api/keno/play`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ userId: currentUser.telegramId, betAmount, selectedNumbers: selectedKenoNumbers })
@@ -421,24 +400,24 @@
                 let data = await res.json();
                 if (data.success) {
                     currentUser.balance = data.newBalance;
-                    alert(`የኬኖ ውጤት:\nወጡ: ${data.drawnNumbers.slice(0,10).join(', ')}...\nግጥሚያ: ${data.matchesCount}\nሽልማት: ETB ${data.winAmount}`);
+                    alert(`የኬኖ ውጤት:\nወጡ: ${data.drawnNumbers ? data.drawnNumbers.slice(0,10).join(', ') : ''}\nግጥሚያ: ${data.matchesCount ?? 0}\nሽልማት: ETB ${data.winAmount ?? 0}`);
                     fetchUserProfile();
                 } else {
-                    alert(data.message);
+                    alert(data.message || 'ስህተት ተፈጥሯል');
                 }
             } catch (e) {
-                alert('የሰርቨር ስህተት ተፈጥሯል!');
+                alert('የሰርቨር ግንኙነት ስህተት ተፈጥሯል!');
             }
         }
 
-        /* --- BINGO LOGIC & MATRIX --- */
+        /* --- BINGO LOGIC --- */
         async function startBingoGame() {
             let cost = parseInt(document.getElementById('bingo-cost').value);
             let pickNum = prompt('ለቢንጎ ጨዋታ ከ 1 እስከ 75 ቁጥር ይምረጡ:');
             if (!pickNum) return;
 
             try {
-                let res = await fetch('/api/bingo/pick', {
+                let res = await fetch(`${API_BASE_URL}/api/bingo/pick`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ userId: currentUser.telegramId, cost, number: parseInt(pickNum) })
@@ -447,11 +426,13 @@
                 if (data.success) {
                     currentUser.balance = data.newBalance;
                     document.getElementById('bingo-board-container').classList.remove('hidden');
-                    renderBingoMatrix(data.matrix);
+                    if (data.matrix) {
+                        renderBingoMatrix(data.matrix);
+                    }
                     alert('ቁጥሩ ተይዟል! ጨዋታው ተጀምሯል።');
                     fetchUserProfile();
                 } else {
-                    alert(data.message);
+                    alert(data.message || 'ስህተት ተፈጥሯል');
                 }
             } catch (e) {
                 alert('የቢንጎ ግንኙነት ስህተት');
@@ -461,8 +442,8 @@
         function renderBingoMatrix(matrix) {
             const grid = document.getElementById('bingo-matrix-grid');
             grid.innerHTML = '';
-            matrix.forEach((row, r) => {
-                row.forEach((cell, c) => {
+            matrix.forEach((row) => {
+                row.forEach((cell) => {
                     let div = document.createElement('div');
                     div.className = `bingo-cell ${cell.marked ? 'marked' : ''}`;
                     div.innerText = cell.display;
@@ -482,28 +463,37 @@
         async function makeDeposit() {
             let amount = parseFloat(document.getElementById('deposit-amount').value);
             if (!amount || amount <= 0) return alert('እባክዎ ትክክለኛ መጠን ያስገቡ');
-            let res = await fetch('/api/deposit', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: currentUser.telegramId, amount })
-            });
-            let data = await res.json();
-            alert(data.message);
+            try {
+                let res = await fetch(`${API_BASE_URL}/api/deposit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type5': 'application/json', 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: currentUser.telegramId, amount })
+                });
+                let data = await res.json();
+                alert(data.message || 'ጥያቄዎ ተልኳል');
+                fetchUserProfile();
+            } catch(e) {
+                alert('ዲፖዚት ማድረግ አልተቻለም');
+            }
         }
 
         async function makeWithdraw() {
             let amount = parseFloat(document.getElementById('withdraw-amount').value);
             let phone = document.getElementById('withdraw-phone').value;
             if (!amount || amount <= 0) return alert('እባክዎ ትክክለኛ መጠን ያስገቡ');
-            let res = await fetch('/api/withdraw', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: currentUser.telegramId, amount, phone })
-            });
-            let data = await res.json();
-            if (data.success) currentUser.balance = data.balance;
-            alert(data.message);
-            fetchUserProfile();
+            try {
+                let res = await fetch(`${API_BASE_URL}/api/withdraw`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: currentUser.telegramId, amount, phone })
+                });
+                let data = await res.json();
+                if (data.success) currentUser.balance = data.balance;
+                alert(data.message || 'ዊዝድሮ ጥያቄ ተልኳል');
+                fetchUserProfile();
+            } catch(e) {
+                alert('ዊዝድሮ ማድረግ አልተቻለም');
+            }
         }
     </script>
 </body>
