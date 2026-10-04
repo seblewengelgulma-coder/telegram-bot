@@ -460,7 +460,7 @@ app.get('/api/user/payment-admin', async (req, res) => {
         const assignedAdminId = user.assignedAdminId || OWNER_ID;
         const admin = await AdminAccount.findOne({ adminId: assignedAdminId, isActive: true });
         if (!admin) return res.status(404).json({ success: false, message: 'Assigned admin not found' });
-        return res.json({ success: true, admin: { adminId: admin.adminId, adminName: admin.adminName, telebirr: admin.telebirr, cbeAccount: admin.cbeAccount || '' } });
+        return res.json({ success: true, admin: { adminId: admin.adminId, adminName: admin.adminName, telebirr: admin.telebirr, cbeAccount: admin.cbeAccount } });
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
@@ -1340,7 +1340,7 @@ bot.action(/keno_num_(\d+)/, async (ctx) => {
         session.selectedNumbers.splice(index, 1);
     } else {
         if (session.selectedNumbers.length >= 10) {
-            return ctx.answerCbQuery('⚠️ ቢበዛ 10 ቁጥሮች ብቻ መምረጥ ይችላሉ!', { show_alert: true });
+            return ctx.answerCbQuery('⚠️️ ቢበዛ 10 ቁጥሮች ብቻ መምረጥ ይችላሉ!', { show_alert: true });
         }
         session.selectedNumbers.push(num);
     }
@@ -2112,71 +2112,39 @@ bot.on('text', async (ctx) => {
 
             if (!isOwner(userId) && targetUser.assignedAdminId !== userId) {
                 delete userSteps[userId];
-                return ctx.reply(`❌ ይህ ተጫዋች በስርዎ የተመደበ አይደለም! ገንዘብ ማስገባት የሚችሉት በስርዎ ላሉ ተጫዋቾች ብቻ ነው።`);
+                return ctx.reply(`❌ ይህ ተጫዋች በስርዎ የተመደበ አይደለም!`);
             }
 
-            userSteps[userId] = { action: 'admin_deposit_amount', targetId: targetId };
-            return ctx.reply(`💵 የ ${targetUser.userName} (ID:${targetId}) አካውንት ላይ የሚሞላውን **የብር መጠን** ያስገቡ:`);
+            userSteps[userId] = { action: 'admin_deposit_amount', targetId };
+            return ctx.reply(`💵 ለተጫዋች **${targetUser.userName}** (ID: \`${targetId}\`) ገቢ ሊደረግ የሚፈልገውን **የብር መጠን** ያስገቡ:`, { parse_mode: 'Markdown' });
+        }
 
-        } else if (step.action === 'admin_deposit_amount') {
-            const amount = parseInt(text);
+        if (step.action === 'admin_deposit_amount') {
+            const amount = parseFloat(text);
+            const targetId = step.targetId;
+            delete userSteps[userId];
+
             if (isNaN(amount) || amount <= 0) {
                 return ctx.reply(`❌ እባክዎ ትክክለኛ የብር መጠን ያስገቡ!`);
             }
 
-            let targetUser = await getOrCreateUser(step.targetId);
+            let targetUser = await User.findOne({ userId: targetId });
+            if (!targetUser) return ctx.reply(`❌ ተጫዋቹ አልተገኘም!`);
+
             targetUser.balance += amount;
             await targetUser.save();
-            delete userSteps[userId];
 
-            ctx.reply(`✅ ለተጫዋች ${targetUser.userName} (ID: \`${step.targetId}\`) **ETB ${amount}** ዲፖዚት ተደርጓል!`, { parse_mode: 'Markdown' });
+            bot.telegram.sendMessage(
+                targetId,
+                `🎉 **እንኳን ደስ አሎት!** አድሚኑ አካውንትዎ ላይ **ETB ${amount}** ጨምረዋል!\n💼 አሁን ያለዎት ባላንስ: **ETB ${targetUser.balance}**`
+            ).catch(()=>{});
 
-            return bot.telegram.sendMessage(step.targetId, `🎉 አድሚን አካውንትዎን በ **ETB ${amount}** ሞልቶታል። 💰`).catch(()=>{});
-        } else if (step.action === 'admin_reply_comment') {
-            let commentId = step.commentId;
-            delete userSteps[userId];
-
-            let comment = await CommentModel.findById(commentId);
-            if (!comment) return ctx.reply('❌ ኮሜንቱ አልተገኘም!');
-
-            comment.adminReply = text;
-            await comment.save();
-
-            bot.telegram.sendMessage(comment.userId, `📥 **ከአድሚን የተሰጠ ምላሽ:**\n\n${text}`).catch(()=>{});
-            return ctx.reply(`✅ ምላሽ ተልኳል!`);
+            return ctx.reply(`✅ ለተጫዋች **${targetUser.userName}** (ID: \`${targetId}\`) 💰 **ETB ${amount}** በተሳካ ሁኔታ ገቢ ተደርጓል!`, adminKeyboard);
         }
-    }
-
-    if (userSteps[userId] && userSteps[userId].action === 'comment_waiting') {
-        let messageText = text;
-        delete userSteps[userId];
-
-        let userDoc = await User.findOne({ userId });
-        let assignedAdminId = userDoc?.assignedAdminId || OWNER_ID;
-
-        let newComment = new CommentModel({ 
-            userId, 
-            assignedAdminId,
-            userName: ctx.from.first_name || 'ተጫዋች', 
-            message: messageText 
-        });
-        await newComment.save();
-
-        ctx.reply(`✅ አስተያየትዎ ለአድሚን ተልኳል!`, mainKeyboard);
-
-        let adminMsg = `📌 **አዲስ ኮሜንት መጣ!**\n\n👤 **ከ:** ${ctx.from.first_name || 'ተጫዋች'} (ID: \`${userId}\`)\n💬 **መልእክት:** "${messageText}"`;
-        let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍ ምላሽ ስጥ', `reply_comment_${newComment._id}`)]]);
-        return bot.telegram.sendMessage(assignedAdminId, adminMsg, { parse_mode: 'Markdown', ...replyBtn }).catch(()=>{});
     }
 });
 
+bot.launch();
 app.listen(PORT, () => {
     console.log(`🚀 Server is running on port ${PORT}`);
 });
-
-bot.launch().then(() => {
-    console.log('🤖 Telegram Bot is running...');
-});
-
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
