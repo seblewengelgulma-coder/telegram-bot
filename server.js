@@ -1626,15 +1626,24 @@ bot.hears('📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', async (ctx) => {
     if (reqs.length === 0) return ctx.reply('📭 ምንም የሚጠብቅ ጥያቄ የለም።', adminKeyboard);
     
     for (let r of reqs) {
-        let msg = `📌 **አይነት:** ${r.type.toUpperCase()}\n👤 **ስም:** ${r.userName} (ID: \`${r.userId}\`)\n💰 **መጠን:** ETB ${r.amount}\n📱 **አካውንት:** \`${r.details}\``;
+        // details በጣም ረጅም (ለምሳሌ HTML ከገባበት) እንዳይበላሽ እስከ 100 ፊደል ብቻ እንወስዳለን
+        let safeDetails = r.details && r.details.length > 100 ? r.details.substring(0, 100) + '...' : (r.details || 'መረጃ የለም');
+        
+        let msg = `📌 **አይነት:** ${r.type ? r.type.toUpperCase() : 'UNKNOWN'}\n👤 **ስም:** ${r.userName || 'ተጠቃሚ'} (ID: \`${r.userId}\`)\n💰 **መጠን:** ETB ${r.amount}\n📱 **አካውንት:** \`${safeDetails}\``;
+        
         let keyboard = Markup.inlineKeyboard([
             [Markup.button.callback('✅ አጽድቅ', `approve_req_${r._id}`), Markup.button.callback('❌ ውድቅ አድርግ', `reject_req_${r._id}`)]
         ]);
         
-        if (r.photoId && msg.length <= 1024) {
-            await ctx.replyWithPhoto(r.photoId, { caption: msg, parse_mode: 'Markdown', ...keyboard });
-        } else {
-            await ctx.reply(msg, { parse_mode: 'Markdown', ...keyboard });
+        try {
+            if (r.photoId && msg.length <= 1024) {
+                await ctx.replyWithPhoto(r.photoId, { caption: msg, parse_mode: 'Markdown', ...keyboard });
+            } else {
+                await ctx.reply(msg, { parse_mode: 'Markdown', ...keyboard });
+            }
+        } catch (err) {
+            console.error('Error sending request message:', err.message);
+            // አንዱ ጥያቄ ሲበላሽ ሌሎቹ እንዳይቋረጡ try/catch ተጠቅመናል
         }
     }
 });
