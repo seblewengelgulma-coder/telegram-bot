@@ -1636,7 +1636,7 @@ bot.hears('📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', async (ctx) => {
     // ጽሁፉ ከ 1024 በላይ ከሆነ ወይም ፎቶ ከሌለ በጽሁፍ መልክ ይልካል 
     // (እጅግ ረጅም ከሆነ ደግሞ ለሁለት ከፍሎ መላክ ሊያስፈልግ ይችላል)
     await ctx.reply(msg, { parse_mode: 'Markdown', ...keyboard });
-}
+
 });
 
 bot.hears('💬 የተጫዋቾች ኮሜንቶች', async (ctx) => {
