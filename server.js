@@ -89,8 +89,6 @@ const requestSchema = new mongoose.Schema({
     type: { type: String, required: true },
     amount: { type: Number, required: true },
     details: { type: String, required: true },
-    photoUniqueId: { type: String, sparse: true }, 
-    photoId: { type: String, sparse: true }, 
     date: { type: Date, default: Date.now }
 });
 const RequestModel = mongoose.model('Request', requestSchema);
@@ -100,9 +98,7 @@ const commentSchema = new mongoose.Schema({
     assignedAdminId: { type: Number, default: null },
     userName: { type: String },
     message: { type: String, required: true },
-    photoId: { type: String, default: null },
     adminReply: { type: String, default: null },
-    adminPhotoId: { type: String, default: null },
     date: { type: Date, default: Date.now }
 });
 const CommentModel = mongoose.model('Comment', commentSchema);
@@ -1340,7 +1336,7 @@ bot.action(/keno_num_(\d+)/, async (ctx) => {
         session.selectedNumbers.splice(index, 1);
     } else {
         if (session.selectedNumbers.length >= 10) {
-            return ctx.answerCbQuery('⚠️️ ቢበዛ 10 ቁጥሮች ብቻ መምረጥ ይችላሉ!', { show_alert: true });
+            return ctx.answerCbQuery('⚠ ቢበዛ 10 ቁጥሮች ብቻ መምረጥ ይችላሉ!', { show_alert: true });
         }
         session.selectedNumbers.push(num);
     }
@@ -1572,13 +1568,13 @@ bot.hears('👤 ፕሮፋይል (Profile)', async (ctx) => {
 bot.hears('💬 ኮሜንት (Comment)', (ctx) => {
     const userId = ctx.from.id;
     userSteps[userId] = { action: 'comment_waiting' };
-    ctx.reply(`💬 ለአድሚን ማስተላለፍ የሚፈልጉትን **አስተያየት፣ ጥያቄ ወይም ፎቶ** ይላኩ፦`);
+    ctx.reply(`💬 ለአድሚን ማስተላለፍ የሚፈልጉትን **አስተያየት ወይም ጥያቄ** ይላኩ፦`);
 });
 
 bot.hears('📖 መመሪያ (Instructions)', (ctx) => {
     ctx.reply(
         `📖 **የጨዋታዎች አጨዋወት መመሪያ**\n\n` +
-        `1. ዲፖዚት በመጫን የቴሌብር ትራንዛክሽን ሊንክ ወይም ቴክስት ይላኩ።\n` +
+        `1. ዲፖዚት በመጫን የቴሌብር ትራንዛክሽን ሊንክ ወይም መረጃ ይላኩ።\n` +
         `2. ፕለይ በመጫን **ቢንጎ** ወይም **ኬኖ** መጫወት ይችላሉ።\n` +
         `3. በየቀኑ ቢያንስ 3 ጊዜ በማሸነፍ ወደ ሳምንታዊው **የአሸናፊዎች አሸናፊ** ቶርናመንት ይቀላቀሉ!`
     );
@@ -1759,16 +1755,8 @@ bot.hears('📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', async (ctx) => {
         let keyboard = Markup.inlineKeyboard([
             [Markup.button.callback('✅ አጽድቅ', `approve_req_${r._id}`), Markup.button.callback('❌ ውድቅ አድርግ', `reject_req_${r._id}`)]
         ]);
-       if (r.photoId && typeof r.photoId === 'string' && r.photoId.trim().length > 5) {
-            try {
-                await ctx.replyWithPhoto(r.photoId.trim(), { caption: msg, parse_mode: 'Markdown', ...keyboard });
-            } catch (photoErr) {
-                console.error('Photo send failed, falling back to text:', photoErr.message);
-                await ctx.reply(msg, { parse_mode: 'Markdown', ...keyboard });
-            }
-        } else {
-            await ctx.reply(msg, { parse_mode: 'Markdown', ...keyboard });
-        }
+        
+        await ctx.reply(msg, { parse_mode: 'Markdown', ...keyboard });
     }
 });
 
@@ -1788,11 +1776,7 @@ bot.hears('💬 የተጫዋቾች ኮሜንቶች', async (ctx) => {
         let msg = `📌 **ከ:** ${c.userName} (ID: \`${c.userId}\`)\n💬 **መልእክት:** "${c.message}"${replyStatus}`;
         let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ', `reply_comment_${c._id}`)]]);
         
-        if (c.photoId) {
-            await ctx.replyWithPhoto(c.photoId, { caption: msg, parse_mode: 'Markdown', ...replyBtn });
-        } else {
-            await ctx.reply(msg, { parse_mode: 'Markdown', ...replyBtn });
-        }
+        await ctx.reply(msg, { parse_mode: 'Markdown', ...replyBtn });
     }
 });
 
@@ -1975,59 +1959,45 @@ bot.action(/reply_comment_(.+)/, async (ctx) => {
     ctx.reply(`✍️ ለዚህ ኮሜንት የሚሰጡትን ምላሽ ይላኩ፦`);
 });
 
-bot.on('photo', async (ctx) => {
+bot.on('text', async (ctx) => {
     const userId = ctx.from.id;
-    const userName = ctx.from.first_name || 'ተጫዋች';
-    let photo = ctx.message.photo[ctx.message.photo.length - 1];
-    let photoId = photo.file_id;
+    const text = ctx.message.text.trim();
 
     if (isAdmin(userId) && userSteps[userId] && userSteps[userId].action === 'admin_reply_comment') {
         let commentId = userSteps[userId].commentId;
-        let replyText = ctx.message.caption || 'ምላሽ';
         delete userSteps[userId];
 
         let comment = await CommentModel.findById(commentId);
         if (!comment) return ctx.reply('❌ ኮሜንቱ አልተገኘም!');
 
-        comment.adminReply = replyText;
-        comment.adminPhotoId = photoId;
+        comment.adminReply = text;
         await comment.save();
 
-        await bot.telegram.sendPhoto(comment.userId, photoId, {
-            caption: `📥 **ከአድሚን የተሰጠ ምላሽ:**\n\n${replyText}`,
-            parse_mode: 'Markdown'
-        }).catch(()=>{});
-
-        return ctx.reply(`✅ የምላሽ ፎቶ ተልኳል!`);
+        await bot.telegram.sendMessage(comment.userId, `📥 **ከአድሚን የተሰጠ ምላሽ:**\n\n${text}`).catch(()=>{});
+        return ctx.reply(`✅ የምላሽ መልእክት ተልኳል!`);
     }
 
     if (userSteps[userId] && userSteps[userId].action === 'comment_waiting') {
-        let messageText = ctx.message.caption || 'ፎቶ';
         delete userSteps[userId];
 
         let userDoc = await User.findOne({ userId });
         let assignedAdminId = userDoc?.assignedAdminId || OWNER_ID;
+        let userName = ctx.from.first_name || 'ተጫዋች';
 
         let newComment = new CommentModel({ 
             userId, 
             assignedAdminId,
             userName, 
-            message: messageText, 
-            photoId 
+            message: text 
         });
         await newComment.save();
 
-        ctx.reply(`✅ ፎቶዎ ለአድሚን ተልኳል!`, mainKeyboard);
+        ctx.reply(`✅ አስተያየትዎ ለአድሚን ተልኳል!`, mainKeyboard);
 
-        let adminMsg = `📌 **አዲስ የኮሜንት ፎቶ መጣ!**\n\n👤 **ከ:** ${userName} (ID: \`${userId}\`)`;
+        let adminMsg = `📌 **አዲስ የኮሜንት መልእክት መጣ!**\n\n👤 **ከ:** ${userName} (ID: \`${userId}\`)\n💬 **መልእክት:** "${text}"`;
         let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ', `reply_comment_${newComment._id}`)]]);
-        return bot.telegram.sendPhoto(assignedAdminId, photoId, { caption: adminMsg, parse_mode: 'Markdown', ...replyBtn }).catch(()=>{});
+        return bot.telegram.sendMessage(assignedAdminId, adminMsg, { parse_mode: 'Markdown', ...replyBtn }).catch(()=>{});
     }
-});
-
-bot.on('text', async (ctx) => {
-    const userId = ctx.from.id;
-    const text = ctx.message.text.trim();
 
     if (userSteps[userId] && userSteps[userId].action === 'deposit_amount') {
         const amount = parseFloat(text);
