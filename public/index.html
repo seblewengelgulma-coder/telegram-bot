@@ -526,7 +526,7 @@
                     const resBox = document.getElementById('keno-result');
                     resBox.style.display = 'block';
                     resBox.innerHTML = `
-                        <h3 style="color:var(--accent); margin-bottom:8px;">የኬኖ ጨዋታ ውጤት (በየ 3 ሰከንዱ የተደረደረ)[cite: 2, 3]</h3>
+                        <h3 style="color:var(--accent); margin-bottom:8px;">የኬኖ ጨዋታ ውጤት (በየ 3 ሰከንዱ የተደረደረ)</h3>
                         <p style="margin-bottom:4px;">የወጡ ቁጥሮች: <strong>${res.data.drawnNumbers.join(', ')}</strong></p>
                         <p style="margin-bottom:4px;">ትክክለኛ ግጥሚያዎች: <strong>${res.data.matchesCount} ቁጥር</strong></p>
                         <p style="font-size:16px; color:#818cf8;">ያሸነፉት: <strong>ETB ${res.data.winAmount}</strong></p>
@@ -648,7 +648,7 @@
             try {
                 const res = await axios.post('/api/deposit', { userId, amount, transactionDetails });
                 if(res.data.success) {
-                    alert('የዲፖዚት ጥያቄዎ ለአድሚን ተልኳል! (የተደጋገመ ትራንዛክሽን ካለ በባክኤንድ ቁጥጥር ይደረግበታል)[cite: 2, 3]');
+                    alert('የዲፖዚት ጥያቄዎ ለአድሚን ተልኳል! (የተደጋገመ ትራንዛክሽን ካለ በባክኤንድ ቁጥጥር ይደረግበታል)');
                     document.getElementById('deposit-amount').value = '';
                     document.getElementById('deposit-details').value = '';
                 }

@@ -129,11 +129,7 @@ const OWNER_ID = 380035906;
 
 let subAdmins = [
     897196934,
-    356872111,
-    1259126904,
-    7192701371,
-    413158935,
-    1694041775
+    356872111
 ];
 
 const initialAdminAccounts = [
@@ -155,30 +151,6 @@ const initialAdminAccounts = [
         telebirr: '0923941648',
         cbeAccount: ''
     },
-    {
-        adminId: 1259126904,
-        adminName: 'ዮሃንሰ',
-        telebirr: '0913774232',
-        cbeAccount: ''
-    },
-    {
-        adminId: 7192701371,
-        adminName: 'እንዳለ',
-        telebirr: '0991220615',
-        cbeAccount: ''
-    },
-    {
-        adminId: 413158935,
-        adminName: 'ቴዲ',
-        telebirr: '0929441620',
-        cbeAccount: ''
-    },
-    {
-        adminId: 1694041775,
-        adminName: 'ሰብለ',
-        telebirr: '0929441620',
-        cbeAccount: ''
-    }
 ];
 
 async function seedAdminAccounts() {
@@ -394,7 +366,7 @@ app.post('/api/bingo/pick', async (req, res) => {
 
         const room = waitingRoom[cost];
         if (room.players.some(p => p.userId === userId)) {
-            return res.path(409).json({ success: false, message: 'በዚህ stake ጨዋታ ቀድሞውኑ ገብተዋል', gameId: room.gameId });
+            return res.status(409).json({ success: false, message: 'በዚህ stake ጨዋታ ቀድሞውኑ ገብተዋል', gameId: room.gameId });
         }
 
         try {
@@ -1975,7 +1947,7 @@ bot.action(/approve_req_(.+)/, async (ctx) => {
     }
 
     await RequestModel.findByIdAndDelete(reqId);
-    ctx.editMessageText(`✅ ጥያቄው ጸድቋል!`);
+    await ctx.editMessageText(`✅ ጥያቄው ጸድቋል!`).catch(() => {});
 });
 
 bot.action(/reject_req_(.+)/, async (ctx) => {
@@ -1992,7 +1964,7 @@ bot.action(/reject_req_(.+)/, async (ctx) => {
 
     bot.telegram.sendMessage(req.userId, `❌ የ ${req.type.toUpperCase()} ጥያቄዎ ውድቅ ተደርጓል።`).catch(()=>{});
     await RequestModel.findByIdAndDelete(reqId);
-    ctx.editMessageText(`❌ ጥያቄው ውድቅ ተደርጓል!`);
+    await ctx.editMessageText(`❌ ጥያቄው ውድቅ ተደርጓል!`).catch(() => {});
 });
 
 bot.action(/reply_comment_(.+)/, async (ctx) => {
