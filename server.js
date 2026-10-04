@@ -5,13 +5,9 @@ const { Telegraf, Markup } = require('telegraf');
 const mongoose = require('mongoose');
 const cron = require('node-cron');
 const path = require('path');
-const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const { io } = require("socket.io-client"); 
-
-const socket = io('https://telegram-bot-xer2.onrender.com/');
 
 // --- 🌐 Express CORS & Body Middlewares ---
 app.use(cors({
@@ -20,13 +16,6 @@ app.use(cors({
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
 app.use(express.json());
-
-// 👉 ለ Mini App የሚሆን የስታቲክ ፋይሎች ማቀናበሪያ
-app.use(express.static(path.join(__dirname, 'public')));
-
-app.get('/', (req, res) => {
-    res.send('🤖 Telegram Bot & Mini App Server is running successfully!');
-});
 
 // --- 1. የሞንጎዲቢ ግንኙነት (MongoDB Connection) ---
 const MONGO_URI = process.env.MONGO_URI;
@@ -64,11 +53,11 @@ const userSchema = new mongoose.Schema({
 });
 const User = mongoose.model('User', userSchema);
 
-// 🎯 የቢንጎ ጨዋታ ስኬማ (BingoGame Schema)
+// 🎯 የቢንጎ ጨዋታ ስኬማ (BingoGame Schema ለ /api/bingo/timeout አስፈላጊ የሆነው)
 const bingoGameSchema = new mongoose.Schema({
     gameId: { type: String, required: true, unique: true },
     cost: { type: Number, required: true },
-    status: { type: String, default: 'waiting' }, 
+    status: { type: String, default: 'waiting' }, // waiting, active, cancelled, finished
     players: { type: Array, default: [] }
 });
 const BingoGame = mongoose.model('BingoGame', bingoGameSchema);
@@ -89,6 +78,8 @@ const requestSchema = new mongoose.Schema({
     type: { type: String, required: true },
     amount: { type: Number, required: true },
     details: { type: String, required: true },
+    photoUniqueId: { type: String, unique: true, sparse: true }, 
+    photoId: { type: String, sparse: true }, 
     date: { type: Date, default: Date.now }
 });
 const RequestModel = mongoose.model('Request', requestSchema);
@@ -98,7 +89,9 @@ const commentSchema = new mongoose.Schema({
     assignedAdminId: { type: Number, default: null },
     userName: { type: String },
     message: { type: String, required: true },
+    photoId: { type: String, default: null },
     adminReply: { type: String, default: null },
+    adminPhotoId: { type: String, default: null },
     date: { type: Date, default: Date.now }
 });
 const CommentModel = mongoose.model('Comment', commentSchema);
@@ -125,7 +118,11 @@ const OWNER_ID = 380035906;
 
 let subAdmins = [
     897196934,
-    356872111
+    356872111,
+    1259126904,
+    7192701371,
+    413158935,
+    1694041775
 ];
 
 const initialAdminAccounts = [
@@ -147,6 +144,30 @@ const initialAdminAccounts = [
         telebirr: '0923941648',
         cbeAccount: ''
     },
+    {
+        adminId: 1259126904,
+        adminName: 'ዮሃንሰ',
+        telebirr: '0913774232',
+        cbeAccount: ''
+    },
+    {
+        adminId: 7192701371,
+        adminName: 'እንዳለ',
+        telebirr: '0991220615',
+        cbeAccount: ''
+    },
+    {
+        adminId: 413158935,
+        adminName: 'ቴዲ',
+        telebirr: '0929441620',
+        cbeAccount: ''
+    },
+    {
+        adminId: 1694041775,
+        adminName: 'ሰብለ',
+        telebirr: '0929441620',
+        cbeAccount: ''
+    }
 ];
 
 async function seedAdminAccounts() {
@@ -193,8 +214,8 @@ async function getAssignedAdminPaymentInfo(assignedAdminId) {
         if (admin) {
             return `🏦 **የአድሚን የክፍያ አካውንት (ለዲፖዚት)**\n\n` +
                    `👤 **አድሚን:** ${admin.adminName}\n` +
-                   `1. **ንግድ ባንክ (CBE):** \`${admin.cbeAccount || 'የለም'}\`\n` +
-                   `2. **ቴሌብር (Telebirr):** \`${admin.telebirr || 'የለም'}\`\n\n`;
+                   `1. **ንግድ ባንክ (CBE):** \`${admin.cbeAccount}\`\n` +
+                   `2. **ቴሌብር (Telebirr):** \`${admin.telebirr}\`\n\n`;
         }
     }
     return `🏦 **የአድሚን የክፍያ አካውንት (ለዲፖዚት)**\n\n` +
@@ -218,43 +239,6 @@ async function getOrCreateUser(userId, userName = 'ተጫዋች') {
         await user.save();
     }
     return user;
-}
-
-// --- 🔐 Mini App / Admin Panel helpers ---
-const ADMIN_PANEL_PASSWORD = process.env.ADMIN_PANEL_PASSWORD || '';
-const ADMIN_PANEL_SECRET = process.env.ADMIN_PANEL_SECRET || 'change-this-admin-panel-secret';
-const ADMIN_PANEL_TOKEN_TTL = 12 * 60 * 60 * 1000;
-
-function createAdminToken(adminId) {
-    const payload = `${Number(adminId)}.${Date.now()}`;
-    const sig = crypto.createHmac('sha256', ADMIN_PANEL_SECRET).update(payload).digest('hex');
-    return Buffer.from(`${payload}.${sig}`).toString('base64url');
-}
-
-function verifyAdminToken(token) {
-    try {
-        const raw = Buffer.from(String(token || ''), 'base64url').toString('utf8');
-        const parts = raw.split('.');
-        if (parts.length !== 3) return null;
-        const [adminId, issuedAt, sig] = parts;
-        const payload = `${adminId}.${issuedAt}`;
-        const expected = crypto.createHmac('sha256', ADMIN_PANEL_SECRET).update(payload).digest('hex');
-        if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
-        if (Date.now() - Number(issuedAt) > ADMIN_PANEL_TOKEN_TTL) return null;
-        const id = Number(adminId);
-        if (!id || !isAdmin(id)) return null;
-        return id;
-    } catch (e) { return null; }
-}
-
-async function requireAdminPanel(req, res, next) {
-    const adminId = verifyAdminToken((req.headers.authorization || '').replace(/^Bearer\s+/i, ''));
-    if (!adminId) return res.status(401).json({ success: false, message: 'Admin login required' });
-    const admin = await AdminAccount.findOne({ adminId, isActive: true });
-    if (!admin) return res.status(403).json({ success: false, message: 'Admin is inactive' });
-    req.adminId = adminId;
-    req.adminAccount = admin;
-    next();
 }
 
 // --- 🌐 የ FRONT-END Mini App API CONNECTIONS ---
@@ -283,8 +267,6 @@ app.get('/api/user/profile', async (req, res) => {
             return res.status(404).json({ success: false, message: 'ተጫዋች አልተገኘም' });
         }
 
-        const assignedAdminId = user.assignedAdminId || OWNER_ID;
-        const assignedAdmin = await AdminAccount.findOne({ adminId: assignedAdminId, isActive: true });
         return res.json({
             success: true,
             user: {
@@ -294,8 +276,7 @@ app.get('/api/user/profile', async (req, res) => {
                 dailyWins: user.dailyWins || 0,
                 level: user.level || 1,
                 wins: user.wins || 0,
-                totalGames: user.totalGames || 0,
-                assignedAdmin: assignedAdmin ? { adminId: assignedAdmin.adminId, adminName: assignedAdmin.adminName, telebirr: assignedAdmin.telebirr, cbeAccount: assignedAdmin.cbeAccount } : null
+                totalGames: user.totalGames || 0
             }
         });
     } catch (error) {
@@ -317,6 +298,7 @@ app.get('/api/user/:userId', async (req, res) => {
     }
 });
 
+// 🎯 የተጠየቀው /api/bingo/timeout ማስተካከያ ኤንድፖይንት (ተጫዋች ወጥቶ ገንዘቡ እንዳይባክን የተስተካከለ)
 app.post('/api/bingo/timeout', async (req, res) => {
     try {
         const { userId, gameId } = req.body;
@@ -328,6 +310,7 @@ app.post('/api/bingo/timeout', async (req, res) => {
             let user = await User.findOne({ userId: Number(userId) });
             if (user) {
                 user.balance += game.cost;
+                if (user.totalGames > 0) user.totalGames -= 1;
                 await user.save();
                 return res.json({ success: true, newBalance: user.balance });
             }
@@ -338,191 +321,107 @@ app.post('/api/bingo/timeout', async (req, res) => {
     }
 });
 
+// 🎯 Mini App Bingo Pick API Endpoint
 app.post('/api/bingo/pick', async (req, res) => {
     try {
-        const userId = Number(req.body.userId);
-        const cost = Number(req.body.cost);
-        const number = Number(req.body.number);
-        const allowedCosts = [10, 20, 50, 100];
-        if (!userId || !allowedCosts.includes(cost) || !Number.isInteger(number) || number < 1 || number > 75) {
-            return res.status(400).json({ success: false, message: 'የBingo መረጃ ትክክል አይደለም' });
+        const { userId, cost, number } = req.body;
+        if (!userId || !cost || !number) {
+            return res.status(400).json({ success: false, message: 'ያልተሟላ መረጃ!' });
         }
 
-        const user = await User.findOne({ userId });
-        if (!user) return res.status(404).json({ success: false, message: 'ተጠቃሚ አልተገኘም' });
-        if (!isAdmin(userId) && Number(user.balance) < cost) {
-            return res.status(400).json({ success: false, message: `በቂ ባላንስ የለዎትም። ETB ${cost} ያስፈልጋል።` });
+        let user = await User.findOne({ userId: Number(userId) });
+        if (!user || (!isAdmin(userId) && user.balance < Number(cost))) {
+            return res.status(400).json({ success: false, message: 'በቂ ባላንስ የለዎትም!' });
         }
 
-        if (!waitingRoom[cost]) {
-            const gameId = `wait_${cost}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-            waitingRoom[cost] = { gameId, cost, players: [], startedAt: Date.now() };
-            await BingoGame.create({ gameId, cost, status: 'waiting', players: [] });
+        let gameId = waitingRoom[cost]?.gameId || ('wait_' + cost + '_' + Date.now());
+        let existing = await TakenNumber.findOne({ gameId, number: Number(number) });
+        if (existing) {
+            return res.status(400).json({ success: false, message: 'ይህ ቁጥር ተይዟል!' });
         }
 
-        const room = waitingRoom[cost];
-        if (room.players.some(p => p.userId === userId)) {
-            return res.status(409).json({ success: false, message: 'በዚህ stake ጨዋታ ቀድሞውኑ ገብተዋል', gameId: room.gameId });
-        }
-
-        try {
-            await TakenNumber.create({ gameId: room.gameId, number, userId, userName: user.userName });
-        } catch (dbErr) {
-            if (dbErr.code === 11000) {
-                return res.status(409).json({ success: false, message: 'ይህ ቁጥር ተይዟል። ሌላ ይምረጡ።' });
-            }
-            throw dbErr;
-        }
+        await TakenNumber.create({ gameId, number: Number(number), userId: Number(userId), userName: user.userName });
 
         if (!isAdmin(userId)) {
-            user.balance -= cost;
-            user.totalGames = (user.totalGames || 0) + 1;
+            user.balance -= Number(cost);
+            user.totalGames += 1;
             await user.save();
         }
 
-        const matrix = generateRandomBingoCard();
-        room.players.push({ userId, matrix, cost, pickedNum: getFormattedBingoNumber(number), fromMiniApp: true });
-        await BingoGame.findOneAndUpdate({ gameId: room.gameId }, { $push: { players: userId } });
-        if (room.players.length === 1) runBingoQueue(cost, room.gameId);
+        let matrix = generateRandomBingoCard();
+        if (!waitingRoom[cost]) {
+            waitingRoom[cost] = { gameId, players: [] };
+        }
+
+        let isFirstInRoom = waitingRoom[cost].players.length === 0;
+        let dispNum = getFormattedBingoNumber(Number(number));
+
+        waitingRoom[cost].players.push({
+            userId: Number(userId),
+            matrix,
+            cost: Number(cost),
+            pickedNum: dispNum,
+            fromMiniApp: true
+        });
+
+        await BingoGame.findOneAndUpdate(
+            { gameId },
+            { $set: { gameId, cost: Number(cost), status: 'waiting' }, $push: { players: Number(userId) } },
+            { upsert: true, new: true }
+        );
+
+        if (isFirstInRoom) {
+            runBingoQueue(cost, gameId);
+        }
 
         return res.json({
             success: true,
-            gameId: room.gameId,
-            cost,
+            gameId,
             matrix,
-            playersCount: room.players.length,
-            pool: room.players.length * cost,
-            remainingSeconds: Math.max(0, 30 - Math.floor((Date.now() - room.startedAt) / 1000)),
-            newBalance: Number(user.balance) || 0,
-            message: `ETB ${cost} የBingo ጨዋታ ውስጥ ገብተዋል`
+            newBalance: user.balance,
+            message: 'ቁጥሩ በተሳካ ሁኔታ ተመርጧል'
         });
     } catch (err) {
-        console.error('Mini App Bingo pick error:', err);
-        res.status(500).json({ success: false, message: 'Server error', error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
+// 🎯 Bingo Status API Endpoint
 app.get('/api/bingo/status', async (req, res) => {
     try {
-        const userId = Number(req.query.userId);
-        const gameId = req.query.gameId;
-        const userGame = activeGames[userId];
+        const { userId, gameId } = req.query;
+        let userGame = activeGames[userId];
 
         if (userGame) {
-            const session = roomSessions[userGame.gameId];
-            if (!session) return res.json({ success: true, status: 'none' });
+            let session = roomSessions[userGame.gameId];
             return res.json({
                 success: true,
                 status: 'active',
-                gameId: userGame.gameId,
-                cost: session.cost,
-                playersCount: session.roomPlayers.length,
-                pool: session.totalPool,
-                currentBall: session.drawnNumber ? getFormattedBingoNumber(session.drawnNumber) : '--',
-                history: session.drawnHistory.map(n => getFormattedBingoNumber(n)),
-                matrix: userGame.matrix,
-                nextDrawInSeconds: session.nextDrawAt ? Math.max(0, Math.ceil((session.nextDrawAt - Date.now()) / 1000)) : 6
+                currentBall: session ? getFormattedBingoNumber(session.drawnNumber) : '--',
+                history: session ? session.drawnHistory.map(n => getFormattedBingoNumber(n)) : [],
+                matrix: userGame.matrix
             });
         }
 
-        let waiting = null;
-        if (gameId) waiting = Object.values(waitingRoom).find(r => r.gameId === gameId);
-        if (!waiting && userId) waiting = Object.values(waitingRoom).find(r => r.players.some(p => p.userId === userId));
+        let waiting = Object.values(waitingRoom).find(r => r.gameId === gameId);
         if (waiting) {
             return res.json({
                 success: true,
                 status: 'waiting',
-                gameId: waiting.gameId,
-                cost: waiting.cost,
                 playersCount: waiting.players.length,
-                pool: waiting.players.length * waiting.cost,
-                remainingSeconds: Math.max(0, 30 - Math.floor((Date.now() - waiting.startedAt) / 1000)),
-                pickedNumbers: waiting.players.map(p => p.pickedNum)
+                pool: waiting.players.length * (waiting.players[0]?.cost || 10)
             });
         }
+
         return res.json({ success: true, status: 'none' });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
 });
 
-app.get('/api/user/payment-admin', async (req, res) => {
-    try {
-        const userId = Number(req.query.userId);
-        if (!userId) return res.status(400).json({ success: false, message: 'Invalid user ID' });
-        let user = await User.findOne({ userId });
-        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-        user = await assignAdminToUser(user);
-        const assignedAdminId = user.assignedAdminId || OWNER_ID;
-        const admin = await AdminAccount.findOne({ adminId: assignedAdminId, isActive: true });
-        if (!admin) return res.status(404).json({ success: false, message: 'Assigned admin not found' });
-        return res.json({ success: true, admin: { adminId: admin.adminId, adminName: admin.adminName, telebirr: admin.telebirr, cbeAccount: admin.cbeAccount } });
-    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
-});
-
-app.post('/api/admin/login', async (req, res) => {
-    try {
-        const adminId = Number(req.body.adminId);
-        const password = String(req.body.password || '');
-        if (!ADMIN_PANEL_PASSWORD) return res.status(503).json({ success: false, message: 'ADMIN_PANEL_PASSWORD is not configured on server' });
-        if (!adminId || password !== ADMIN_PANEL_PASSWORD || !isAdmin(adminId)) return res.status(401).json({ success: false, message: 'Invalid admin credentials' });
-        const admin = await AdminAccount.findOne({ adminId, isActive: true });
-        if (!admin) return res.status(403).json({ success: false, message: 'Admin is inactive' });
-        return res.json({ success: true, token: createAdminToken(adminId), admin: { adminId: admin.adminId, adminName: admin.adminName, telebirr: admin.telebirr, cbeAccount: admin.cbeAccount, isOwner: isOwner(adminId) } });
-    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
-});
-
-app.get('/api/admin/me', requireAdminPanel, async (req, res) => {
-    res.json({ success: true, admin: { adminId: req.adminAccount.adminId, adminName: req.adminAccount.adminName, telebirr: req.adminAccount.telebirr, cbeAccount: req.adminAccount.cbeAccount, isOwner: isOwner(req.adminId) } });
-});
-
-app.get('/api/admin/requests', requireAdminPanel, async (req, res) => {
-    const filter = isOwner(req.adminId) ? {} : { assignedAdminId: req.adminId };
-    const requests = await RequestModel.find(filter).sort({ date: -1 }).limit(100).lean();
-    res.json({ success: true, requests });
-});
-
-app.get('/api/admin/players', requireAdminPanel, async (req, res) => {
-    const filter = isOwner(req.adminId) ? {} : { assignedAdminId: req.adminId };
-    const players = await User.find(filter).sort({ _id: -1 }).limit(200).select('userId userName phone balance assignedAdminId totalGames wins dailyWins level').lean();
-    res.json({ success: true, players });
-});
-
-app.post('/api/admin/requests/:id/approve', requireAdminPanel, async (req, res) => {
-    try {
-        const request = await RequestModel.findById(req.params.id);
-        if (!request) return res.status(404).json({ success: false, message: 'Request not found' });
-        if (!isOwner(req.adminId) && request.assignedAdminId !== req.adminId) return res.status(403).json({ success: false, message: 'Not assigned to this admin' });
-        const user = await getOrCreateUser(request.userId);
-        if (request.type === 'deposit') {
-            user.balance += Number(request.amount);
-            await user.save();
-        }
-        await RequestModel.findByIdAndDelete(request._id);
-        bot.telegram.sendMessage(request.userId, `🎉 የ ${request.amount} ETB የ${request.type === 'deposit' ? 'ዲፖዚት' : 'ዊዝድሮ'} ጥያቄዎ ጸድቋል! 💰`).catch(() => {});
-        res.json({ success: true, message: 'Approved', balance: user.balance });
-    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
-});
-
-app.post('/api/admin/requests/:id/reject', requireAdminPanel, async (req, res) => {
-    try {
-        const request = await RequestModel.findById(req.params.id);
-        if (!request) return res.status(404).json({ success: false, message: 'Request not found' });
-        if (!isOwner(req.adminId) && request.assignedAdminId !== req.adminId) return res.status(403).json({ success: false, message: 'Not assigned to this admin' });
-        if (request.type === 'withdraw') {
-            const user = await getOrCreateUser(request.userId);
-            user.balance += Number(request.amount);
-            await user.save();
-        }
-        await RequestModel.findByIdAndDelete(request._id);
-        bot.telegram.sendMessage(request.userId, `❌ የ ${request.type.toUpperCase()} ጥያቄዎ ውድቅ ተደርጓል።`).catch(() => {});
-        res.json({ success: true, message: 'Rejected' });
-    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
-});
-
 app.post('/api/deposit', async (req, res) => {
     try {
-        const { userId, amount, transactionDetails } = req.body;
+        const { userId, amount, photoId } = req.body;
         let user = await User.findOne({ userId: Number(userId) });
         if (!user) return res.status(404).json({ success: false, message: 'ተጠቃሚ አልተገኘም' });
 
@@ -533,18 +432,18 @@ app.post('/api/deposit', async (req, res) => {
             userName: user.userName,
             type: 'deposit',
             amount: Number(amount),
-            details: transactionDetails || 'Mini App Deposit'
+            details: 'Mini App Screenshot Deposit',
+            photoId: photoId || null
         });
         await newReq.save();
 
-        await bot.telegram.sendMessage(assignedAdminId, 
-            `📥 **አዲስ የዲፖዚት ጥያቄ (ከMini App)!**\n\n👤 **ስም:** ${user.userName} (ID: \`${userId}\`)\n💰 **መጠን:** ETB ${amount}\n\n🔗 **የትራንዛክሽን ሊንክ/መረጃ:**\n${transactionDetails || 'N/A'}`,
+        bot.telegram.sendMessage(assignedAdminId, 
+            `📥 **አዲስ የዲፖዚት ጥያቄ (ከMini App)!**\n\n👤 **ስም:** ${user.userName} (ID: \`${userId}\`)\n💰 **መጠን:** ETB ${amount}`,
             { parse_mode: 'Markdown' }
         ).catch(() => {});
 
         res.json({ success: true, message: 'ጥያቄዎ ለአድሚን ተልኳል' });
     } catch (err) {
-        console.error('Deposit Error:', err);
         res.status(500).json({ success: false, error: err.message });
     }
 });
@@ -671,7 +570,6 @@ cron.schedule('0 0 * * 0', async () => {
 // --- 5. BINGO & KENO BOT HELPER FUNCTIONS ---
 
 function getKenoKeyboard(selectedNumbers = [], betAmount = 10) {
-    const WEB_APP_URL = process.env.WEB_APP_URL || 'https://telegram-bot-xer2.onrender.com/miniapp';
     let keyboard = [];
     let row = [];
     for (let i = 1; i <= 80; i++) {
@@ -684,7 +582,6 @@ function getKenoKeyboard(selectedNumbers = [], betAmount = 10) {
         }
     }
     keyboard.push([Markup.button.callback('📊 የሽልማት ሰንጠረዥ (Payout Table)', 'view_payout_table')]);
-    keyboard.push([Markup.button.webApp('🚀 በ Mini App ኬኖ ጫወት', WEB_APP_URL)]);
     keyboard.push([Markup.button.callback('🎲 ኬኖ ጨዋታ ጀምር (Draw)', 'start_keno_draw')]);
     keyboard.push([Markup.button.callback('🔙 ወደ ዋናው ሜኑ', 'back_to_main_menu')]);
     return Markup.inlineKeyboard(keyboard);
@@ -731,7 +628,6 @@ function getFormattedBingoNumber(num) {
 }
 
 async function getBingo1to75Keyboard(gameId) {
-    const WEB_APP_URL = process.env.WEB_APP_URL || 'https://telegram-bot-xer2.onrender.com/miniapp';
     let keyboard = [];
     let row = [];
 
@@ -752,7 +648,6 @@ async function getBingo1to75Keyboard(gameId) {
             row = [];
         }
     }
-    keyboard.push([Markup.button.webApp('🚀 በ Mini App ቢንጎ ጫወት', WEB_APP_URL)]);
     keyboard.push([Markup.button.callback('🔙 ወደ ዋናው ሜኑ', 'back_to_main_menu')]);
     return Markup.inlineKeyboard(keyboard);
 }
@@ -955,7 +850,7 @@ bot.command('addadmin', (ctx) => {
         subAdmins.push(targetId);
         return ctx.reply(`✅ ዩዘር ID \`${targetId}\` ያለው አዲስ ረዳት አድሚን ተጨምሯል!`, { parse_mode: 'Markdown' });
     }
-    ctx.reply('⚠ እባክዎ ትክክለኛ ID ያስገቡ። ምሳሌ፦ `/addadmin 123456789`');
+    ctx.reply('⚠️️ እባክዎ ትክክለኛ ID ያስገቡ። ምሳሌ፦ `/addadmin 123456789`');
 });
 
 bot.command('removeadmin', (ctx) => {
@@ -1039,7 +934,7 @@ bot.action(/play_(\d+)/, async (ctx) => {
     
     let waitingGameId = 'wait_' + cost + '_' + Date.now();
     if (!waitingRoom[cost]) {
-        waitingRoom[cost] = { gameId: waitingGameId, cost, players: [], startedAt: Date.now() };
+        waitingRoom[cost] = { gameId: waitingGameId, players: [] };
     }
 
     await BingoGame.create({
@@ -1051,7 +946,7 @@ bot.action(/play_(\d+)/, async (ctx) => {
 
     let keyboard = await getBingo1to75Keyboard(waitingRoom[cost].gameId);
     ctx.editMessageText(
-        `🎯 **የቢንጎ ጨዋታ (ETB ${cost})**\n\nከዚህ በታች ካሉት ቁጥሮች ውስጥ የሚፈልጉትን አንድ ቁጥር ይምረጡ ወይም ሚኒ አፕ በመጠቀም ይጫወቱ:`,
+        `🎯 **የቢንጎ ጨዋታ (ETB ${cost})**\n\nከዚህ በታች ካሉት ቁጥሮች ውስጥ የሚፈልጉትን አንድ ቁጥር ይምረጡ:`,
         keyboard
     );
 });
@@ -1077,16 +972,14 @@ bot.action(/b_pick_(.+)_(\d+)/, async (ctx) => {
     }
 
     try {
-        try {
-            await TakenNumber.create({ gameId, number: num, userId, userName });
-        } catch (dbErr) {
-            if (dbErr.code === 11000) {
-                let updatedKb = await getBingo1to75Keyboard(gameId);
-                await ctx.editMessageText(`⚠️ ይህ ቁጥር አሁን በሌላ ተጫዋች ተይዟል!`, updatedKb);
-                return ctx.answerCbQuery(`❌ ቁጥሩ ተይዟል!`, { show_alert: true });
-            }
-            throw dbErr;
+        let existing = await TakenNumber.findOne({ gameId, number: num });
+        if (existing) {
+            let updatedKb = await getBingo1to75Keyboard(gameId);
+            await ctx.editMessageText(`⚠️ ይህ ቁጥር አሁን በሌላ ተጫዋች ተይዟል!`, updatedKb);
+            return ctx.answerCbQuery(`❌ ቁጥሩ ተይዟል!`, { show_alert: true });
         }
+
+        await TakenNumber.create({ gameId, number: num, userId, userName });
 
         if (!isAdmin(userId)) {
             user.balance -= cost;
@@ -1096,7 +989,7 @@ bot.action(/b_pick_(.+)_(\d+)/, async (ctx) => {
 
         let matrix = generateRandomBingoCard();
         if (!waitingRoom[cost] || !waitingRoom[cost].players) {
-            waitingRoom[cost] = { gameId, cost: Number(cost), players: [], startedAt: Date.now() };
+            waitingRoom[cost] = { gameId, players: [] };
         }
 
         let isFirstInRoom = waitingRoom[cost].players.length === 0;
@@ -1129,8 +1022,7 @@ bot.action(/b_pick_(.+)_(\d+)/, async (ctx) => {
 });
 
 function runBingoQueue(cost, gameId) {
-    const startedAt = waitingRoom[cost]?.startedAt || Date.now();
-    let countdown = Math.max(0, 30 - Math.floor((Date.now() - startedAt) / 1000));
+    let countdown = 30;
 
     let countdownInterval = setInterval(async () => {
         countdown--;
@@ -1169,7 +1061,7 @@ function runBingoQueue(cost, gameId) {
                     if (!isAdmin(p.userId)) {
                         let pUser = await getOrCreateUser(p.userId);
                         pUser.balance += p.cost; 
-                        pUser.totalGames -= 1;
+                        if (pUser.totalGames > 0) pUser.totalGames -= 1;
                         await pUser.save();
                     }
                     if (p.ctx) {
@@ -1206,7 +1098,6 @@ function runBingoQueue(cost, gameId) {
                 drawnHistory,
                 availableNumbers,
                 drawnNumber: null,
-                nextDrawAt: Date.now() + 6000,
                 gameActive: true
             };
 
@@ -1233,35 +1124,32 @@ function runBingoQueue(cost, gameId) {
                 let newNum = session.availableNumbers.splice(Math.floor(Math.random() * session.availableNumbers.length), 1)[0];
                 session.drawnNumber = newNum;
                 session.drawnHistory.push(newNum);
-                session.nextDrawAt = Date.now() + 6000;
 
                 let formattedHist = session.drawnHistory.map(n => getFormattedBingoNumber(n)).join(', ');
                 let formattedCurrent = getFormattedBingoNumber(newNum);
 
                 for (let pId of session.roomPlayers) {
                     let userGame = activeGames[pId];
-                    if (userGame && userGame.gameId === activeGameSessionId) {
-                        if (userGame.messageId) {
-                            try {
-                                let messageText = 
-                                    `🎲 <b>ጨዋታ በሂደት ላይ... (ETB ${session.cost})</b>\n` +
-                                    `💰 አጠቃላይ ፖል: <b>ETB ${session.totalPool}</b> \vert{} ሽልማት: <b>ETB ${session.winnerReward}</b>\n\n` +
-                                    `🔴 <b><u>አሁን የተጠራው ቁጥር፦</u></b>\n\n` +
-                                    `📢 <b>[ ${formattedCurrent} ]</b> 📢\n\n` +
-                                    `📜 <b>የወጡ ቁጥሮች ታሪክ:</b>\n[ ${formattedHist} ]`;
+                    if (userGame && userGame.gameId === activeGameSessionId && userGame.messageId) {
+                        try {
+                            let messageText = 
+                                `🎲 <b>ጨዋታ በሂደት ላይ... (ETB ${session.cost})</b>\n` +
+                                `💰 አጠቃላይ ፖል: <b>ETB ${session.totalPool}</b> \vert{} ሽልማት: <b>ETB ${session.winnerReward}</b>\n\n` +
+                                `🔴 <b><u>አሁን የተጠራው ቁጥር፦</u></b>\n\n` +
+                                `📢 <b>[ ${formattedCurrent} ]</b> 📢\n\n` +
+                                `📜 <b>የወጡ ቁጥሮች ታሪክ:</b>\n[ ${formattedHist} ]`;
 
-                                await bot.telegram.editMessageText(
-                                    pId,
-                                    userGame.messageId,
-                                    undefined,
-                                    messageText,
-                                    {
-                                        parse_mode: 'HTML',
-                                        ...getBingoKeyboard(userGame.matrix)
-                                    }
-                                );
-                            } catch (e) {}
-                        }
+                            await bot.telegram.editMessageText(
+                                pId,
+                                userGame.messageId,
+                                undefined,
+                                messageText,
+                                {
+                                    parse_mode: 'HTML',
+                                    ...getBingoKeyboard(userGame.matrix)
+                                }
+                            );
+                        } catch (e) {}
                     }
                 }
             }, 6000);
@@ -1336,7 +1224,7 @@ bot.action(/keno_num_(\d+)/, async (ctx) => {
         session.selectedNumbers.splice(index, 1);
     } else {
         if (session.selectedNumbers.length >= 10) {
-            return ctx.answerCbQuery('⚠ ቢበዛ 10 ቁጥሮች ብቻ መምረጥ ይችላሉ!', { show_alert: true });
+            return ctx.answerCbQuery('⚠️ ቢበዛ 10 ቁጥሮች ብቻ መምረጥ ይችላሉ!', { show_alert: true });
         }
         session.selectedNumbers.push(num);
     }
@@ -1505,7 +1393,6 @@ bot.action('back_to_main_menu', (ctx) => {
     ]));
 });
 
-// --- 💰 ዲፖዚት (Deposit Handler) ---
 bot.hears('💰 ዲፖዚት (Deposit)', async (ctx) => {
     const userId = ctx.from.id;
     let user = await getOrCreateUser(userId);
@@ -1521,31 +1408,20 @@ bot.hears('💰 ዲፖዚት (Deposit)', async (ctx) => {
     const paymentInfo = await getAssignedAdminPaymentInfo(user.assignedAdminId);
 
     userSteps[userId] = { action: 'deposit_amount' };
-    ctx.reply(
-        `${paymentInfo}💰 እባክዎ **ሊያስገቡት የሚፈልጉትን የብር መጠን** ቁጥር ብቻ ይጻፉ:`, 
-        { parse_mode: 'Markdown' }
-    );
+    ctx.reply(`${paymentInfo}💰 እባክዎ **ሊያስገቡት የሚፈልጉትን የብር መጠን** ቁጥር ብቻ ይጻፉ:`, { parse_mode: 'Markdown' });
 });
 
-// --- 💳 ዊዝድሮ (Withdraw) ---
 bot.hears('💳 ዊዝድሮ (Withdraw)', async (ctx) => {
     const userId = ctx.from.id;
     let user = await getOrCreateUser(userId);
-    
     if (!user.phone) {
         return ctx.reply(
-            `⚠ የዊዝድሮ ጥያቄ ከማቅረብዎ በፊት ስልክ ቁጥርዎ መመዝገብ አለበት።`,
+            `⚠️ የዊዝድሮ ጥያቄ ከማቅረብዎ በፊት ስልክ ቁጥርዎ መመዝገብ አለበት።`,
             Markup.keyboard([[Markup.button.contactRequest('📱 ስልክ ቁጥር አጋራ (Share Contact)')]]).resize()
         );
     }
-
     userSteps[userId] = { action: 'withdraw_amount' };
-    ctx.reply(
-        `💳 **የገንዘብ ማውጣት ጥያቄ (Withdrawal)**\n\n` +
-        `📱 መቀበያ ስልክ ቁጥርዎ: **${user.phone}** (በተመዘገበው ቁጥር ይላካል)\n\n` +
-        `💰 ማውጣት የሚፈልጉትን **የብር መጠን** ብቻ ቁጥር አድርገው ይጻፉ:`,
-        { parse_mode: 'Markdown' }
-    );
+    ctx.reply(`💳 **የገንዘብ ማውጣት ጥያቄ**\n\nመቀበያ ስልክ ቁጥርዎ: **${user.phone}**\n\n💰 ማውጣት የሚፈልጉትን **የብር መጠን** ብቻ ቁጥር አድርገው ይጻፉ:`);
 });
 
 bot.hears('👤 ፕሮፋይል (Profile)', async (ctx) => {
@@ -1568,13 +1444,13 @@ bot.hears('👤 ፕሮፋይል (Profile)', async (ctx) => {
 bot.hears('💬 ኮሜንት (Comment)', (ctx) => {
     const userId = ctx.from.id;
     userSteps[userId] = { action: 'comment_waiting' };
-    ctx.reply(`💬 ለአድሚን ማስተላለፍ የሚፈልጉትን **አስተያየት ወይም ጥያቄ** ይላኩ፦`);
+    ctx.reply(`💬 ለአድሚን ማስተላለፍ የሚፈልጉትን **አስተያየት፣ ጥያቄ ወይም ስክሪንሾት ፎቶ** ይላኩ፦`);
 });
 
 bot.hears('📖 መመሪያ (Instructions)', (ctx) => {
     ctx.reply(
         `📖 **የጨዋታዎች አጨዋወት መመሪያ**\n\n` +
-        `1. ዲፖዚት በመጫን የቴሌብር ትራንዛክሽን ሊንክ ወይም መረጃ ይላኩ።\n` +
+        `1. ዲፖዚት በመጫን ገንዘብ ገቢ በማድረግ ስክሪንሾት ፎቶ ይላኩ።\n` +
         `2. ፕለይ በመጫን **ቢንጎ** ወይም **ኬኖ** መጫወት ይችላሉ።\n` +
         `3. በየቀኑ ቢያንስ 3 ጊዜ በማሸነፍ ወደ ሳምንታዊው **የአሸናፊዎች አሸናፊ** ቶርናመንት ይቀላቀሉ!`
     );
@@ -1678,7 +1554,7 @@ async function sendAdminList(ctx, page = 1) {
 
     let navButtons = [];
     if (page > 1) {
-        navButtons.push(Markup.button.callback('⬅ Prev (ቀደመው)', `admins_page_${page - 1}`));
+        navButtons.push(Markup.button.callback('⬅️ Prev (ቀደመው)', `admins_page_${page - 1}`));
     }
     if (page < totalPages) {
         navButtons.push(Markup.button.callback('Next (ቀጣይ) ➡️', `admins_page_${page + 1}`));
@@ -1742,21 +1618,23 @@ bot.hears('📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', async (ctx) => {
     if (!isAdmin(ctx.from.id)) return;
     
     let filter = {};
-    if (ctx.from.id !== OWNER_ID) {
+    if (!isOwner(ctx.from.id)) {
         filter = { assignedAdminId: ctx.from.id };
     }
 
     let reqs = await RequestModel.find(filter);
     if (reqs.length === 0) return ctx.reply('📭 ምንም የሚጠብቅ ጥያቄ የለም።', adminKeyboard);
-
+    
     for (let r of reqs) {
-        let msg = `📌 **አይነት:** ${r.type.toUpperCase()}\n👤 **ስም:** ${r.userName} (ID: \`${r.userId}\`)\n💰 **መጠን:** ETB ${r.amount}\n📱 **አካውንት/መረጃ:** \`${r.details}\``;
-        
+        let msg = `📌 **አይነት:** ${r.type.toUpperCase()}\n👤 **ስም:** ${r.userName} (ID: \`${r.userId}\`)\n💰 **መጠን:** ETB ${r.amount}\n📱 **አካውንት:** \`${r.details}\``;
         let keyboard = Markup.inlineKeyboard([
             [Markup.button.callback('✅ አጽድቅ', `approve_req_${r._id}`), Markup.button.callback('❌ ውድቅ አድርግ', `reject_req_${r._id}`)]
         ]);
-        
-        await ctx.reply(msg, { parse_mode: 'Markdown', ...keyboard });
+        if (r.photoId) {
+            await ctx.replyWithPhoto(r.photoId, { caption: msg, parse_mode: 'Markdown', ...keyboard });
+        } else {
+            await ctx.reply(msg, { parse_mode: 'Markdown', ...keyboard });
+        }
     }
 });
 
@@ -1776,7 +1654,11 @@ bot.hears('💬 የተጫዋቾች ኮሜንቶች', async (ctx) => {
         let msg = `📌 **ከ:** ${c.userName} (ID: \`${c.userId}\`)\n💬 **መልእክት:** "${c.message}"${replyStatus}`;
         let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ', `reply_comment_${c._id}`)]]);
         
-        await ctx.reply(msg, { parse_mode: 'Markdown', ...replyBtn });
+        if (c.photoId) {
+            await ctx.replyWithPhoto(c.photoId, { caption: msg, parse_mode: 'Markdown', ...replyBtn });
+        } else {
+            await ctx.reply(msg, { parse_mode: 'Markdown', ...replyBtn });
+        }
     }
 });
 
@@ -1931,7 +1813,7 @@ bot.action(/approve_req_(.+)/, async (ctx) => {
     }
 
     await RequestModel.findByIdAndDelete(reqId);
-    await ctx.editMessageText(`✅ ጥያቄው ጸድቋል!`).catch(() => {});
+    ctx.editMessageText(`✅ ጥያቄው ጸድቋል!`);
 });
 
 bot.action(/reject_req_(.+)/, async (ctx) => {
@@ -1946,9 +1828,9 @@ bot.action(/reject_req_(.+)/, async (ctx) => {
         await user.save();
     }
 
-    bot.telegram.sendMessage(req.userId, `❌ የ ${req.type.toUpperCase()} ጥያቄዎ ውድቅ ተደርጓል።`).catch(()=>{});
+    bot.telegram.sendMessage(req.userId, `❌ የ ${req.type.toUpperCase()} ጥያቄዎ ውድቅ ተደርቋል።`).catch(()=>{});
     await RequestModel.findByIdAndDelete(reqId);
-    await ctx.editMessageText(`❌ ጥያቄው ውድቅ ተደርጓል!`).catch(() => {});
+    ctx.editMessageText(`❌ ጥያቄው ውድቅ ተደርቋል!`);
 });
 
 bot.action(/reply_comment_(.+)/, async (ctx) => {
@@ -1959,162 +1841,190 @@ bot.action(/reply_comment_(.+)/, async (ctx) => {
     ctx.reply(`✍️ ለዚህ ኮሜንት የሚሰጡትን ምላሽ ይላኩ፦`);
 });
 
-bot.on('text', async (ctx) => {
+bot.on('photo', async (ctx) => {
     const userId = ctx.from.id;
-    const text = ctx.message.text.trim();
+    const userName = ctx.from.first_name || 'ተጫዋች';
+    let photo = ctx.message.photo[ctx.message.photo.length - 1];
+    let photoId = photo.file_id;
+    let photoUniqueId = photo.file_unique_id;
 
     if (isAdmin(userId) && userSteps[userId] && userSteps[userId].action === 'admin_reply_comment') {
         let commentId = userSteps[userId].commentId;
+        let replyText = ctx.message.caption || 'ምላሽ';
         delete userSteps[userId];
 
         let comment = await CommentModel.findById(commentId);
         if (!comment) return ctx.reply('❌ ኮሜንቱ አልተገኘም!');
 
-        comment.adminReply = text;
+        comment.adminReply = replyText;
+        comment.adminPhotoId = photoId;
         await comment.save();
 
-        await bot.telegram.sendMessage(comment.userId, `📥 **ከአድሚን የተሰጠ ምላሽ:**\n\n${text}`).catch(()=>{});
-        return ctx.reply(`✅ የምላሽ መልእክት ተልኳል!`);
+        await bot.telegram.sendPhoto(comment.userId, photoId, {
+            caption: `📥 **ከአድሚን የተሰጠ ምላሽ:**\n\n${replyText}`,
+            parse_mode: 'Markdown'
+        }).catch(()=>{});
+
+        return ctx.reply(`✅ የምላሽ ፎቶ ተልኳል!`);
     }
 
     if (userSteps[userId] && userSteps[userId].action === 'comment_waiting') {
+        let messageText = ctx.message.caption || 'ፎቶ';
         delete userSteps[userId];
 
         let userDoc = await User.findOne({ userId });
         let assignedAdminId = userDoc?.assignedAdminId || OWNER_ID;
-        let userName = ctx.from.first_name || 'ተጫዋች';
 
         let newComment = new CommentModel({ 
             userId, 
             assignedAdminId,
             userName, 
-            message: text 
+            message: messageText, 
+            photoId 
         });
         await newComment.save();
 
-        ctx.reply(`✅ አስተያየትዎ ለአድሚን ተልኳል!`, mainKeyboard);
-
-        let adminMsg = `📌 **አዲስ የኮሜንት መልእክት መጣ!**\n\n👤 **ከ:** ${userName} (ID: \`${userId}\`)\n💬 **መልእክት:** "${text}"`;
-        let replyBtn = Markup.inlineKeyboard([[Markup.button.callback('✍️ ምላሽ ስጥ', `reply_comment_${newComment._id}`)]]);
-        return bot.telegram.sendMessage(assignedAdminId, adminMsg, { parse_mode: 'Markdown', ...replyBtn }).catch(()=>{});
+        ctx.reply(`✅ ፎቶዎ ለአድሚን ተልኳል!`, mainKeyboard);
     }
+});
 
-    if (userSteps[userId] && userSteps[userId].action === 'deposit_amount') {
-        const amount = parseFloat(text);
-        if (isNaN(amount) || amount <= 0) {
-            return ctx.reply(`❌ እባክዎ ትክክለኛ የብር መጠን ቁጥር ብቻ ያስገቡ!`);
-        }
-        userSteps[userId] = { action: 'deposit_transaction', amount: amount };
-        return ctx.reply(`🔗 እባክዎ የቴሌብር **ትራንዛክሽን ሊንክ ወይም መረጃ (Transaction Link / Details)** ኮፒ አድርገው ይላኩን:`, { parse_mode: 'Markdown' });
-    }
+bot.on('text', async (ctx) => {
+    const userId = ctx.from.id;
+    const text = ctx.message.text;
 
-    if (userSteps[userId] && userSteps[userId].action === 'deposit_transaction') {
-        const amount = userSteps[userId].amount;
-        delete userSteps[userId];
-
-        let user = await getOrCreateUser(userId);
-        const assignedAdminId = user.assignedAdminId || OWNER_ID;
-
-        let newReq = new RequestModel({
-            userId: Number(userId),
-            assignedAdminId,
-            userName: user.userName,
-            type: 'deposit',
-            amount: Number(amount),
-            details: text
-        });
-        await newReq.save();
-
-        await bot.telegram.sendMessage(assignedAdminId, 
-            `📥 **አዲስ የዲፖዚት ጥያቄ (በትራንዛክሽን ሊንክ)!**\n\n👤 **ስም:** ${user.userName} (ID: \`${userId}\`)\n💰 **መጠን:** ETB ${amount}\n\n🔗 **የትራንዛክሽን ሊንክ/መረጃ:**\n\`${text}\``,
-            { parse_mode: 'Markdown' }
-        ).catch(() => {});
-
-        return ctx.reply(`✅ የዲፖዚት ጥያቄዎ እና የትራንዛክሽን መረጃው ለአድሚን ተልኳል። አድሚኑ ሲያረጋግጠው ባላንስዎ ይስተካከላል!`, mainKeyboard);
-    }
-
-    if (userSteps[userId] && userSteps[userId].action === 'withdraw_amount') {
-        const amount = parseFloat(text);
-        if (isNaN(amount) || amount <= 0) {
-            return ctx.reply(`❌ እባክዎ ትክክለኛ የብር መጠን ቁጥር ብቻ ያስገቡ!`);
-        }
-
-        let user = await getOrCreateUser(userId);
-        if (user.balance < amount) {
-            delete userSteps[userId];
-            return ctx.reply(`❌ በቂ ባላንስ የለዎትም! (ያሎት ባላንስ: ETB ${user.balance})`, mainKeyboard);
-        }
-
-        user.balance -= amount;
-        await user.save();
-        delete userSteps[userId];
-
-        const assignedAdminId = user.assignedAdminId || OWNER_ID;
-        let newReq = new RequestModel({
-            userId: Number(userId),
-            assignedAdminId,
-            userName: user.userName,
-            type: 'withdraw',
-            amount: Number(amount),
-            details: user.phone || 'N/A'
-        });
-        await newReq.save();
-
-        bot.telegram.sendMessage(assignedAdminId, 
-            `📥 **አዲስ የዊዝድሮ ጥያቄ!**\n\n👤 **ስም:** ${user.userName} (ID: \`${userId}\`)\n💰 **መጠን:** ETB ${amount}\n📱 **ስልክ:** ${user.phone}`,
-            { parse_mode: 'Markdown' }
-        ).catch(() => {});
-
-        return ctx.reply(`✅ የዊዝድሮ ጥያቄዎ በተሳካ ሁኔታ ተልኳል!`, mainKeyboard);
-    }
-
-    if (isAdmin(userId) && userSteps[userId]) {
+    if (userSteps[userId]) {
         let step = userSteps[userId];
-        if (step.action === 'admin_deposit_id') {
-            const targetId = parseInt(text);
 
-            let targetUser = await User.findOne({ userId: targetId });
-
-            if (!targetUser) {
-                delete userSteps[userId];
-                return ctx.reply(`❌ ዩዘር ID \`${targetId}\` ያለው ተጫዋች ዳታቤዝ ውስጥ አልተገኘም!`, { parse_mode: 'Markdown' });
+        if (step.action === 'deposit_amount') {
+            let amount = parseFloat(text);
+            if (isNaN(amount) || amount <= 0) {
+                return ctx.reply('⚠️ እባክዎ ትክክለኛ የብር መጠን ቁጥር ብቻ ያስገቡ:');
             }
-
-            if (!isOwner(userId) && targetUser.assignedAdminId !== userId) {
-                delete userSteps[userId];
-                return ctx.reply(`❌ ይህ ተጫዋች በስርዎ የተመደበ አይደለም!`);
-            }
-
-            userSteps[userId] = { action: 'admin_deposit_amount', targetId };
-            return ctx.reply(`💵 ለተጫዋች **${targetUser.userName}** (ID: \`${targetId}\`) ገቢ ሊደረግ የሚፈልገውን **የብር መጠን** ያስገቡ:`, { parse_mode: 'Markdown' });
+            userSteps[userId] = { action: 'deposit_screenshot', amount };
+            return ctx.reply(`📸 አሁን ያገቡበትን የባንክ ወይም የቴሌብር **ስክሪንሾት ፎቶ** ይላኩ:`);
         }
 
-        if (step.action === 'admin_deposit_amount') {
-            const amount = parseFloat(text);
-            const targetId = step.targetId;
+        else if (step.action === 'deposit_screenshot') {
+            return ctx.reply('⚠️ እባክዎ የክፍያ ስክሪንሾት ፎቶ (Photo) ይላኩ!');
+        }
+
+        else if (step.action === 'withdraw_amount') {
+            let amount = parseFloat(text);
+            let user = await getOrCreateUser(userId);
+
+            if (isNaN(amount) || amount <= 0) {
+                return ctx.reply('⚠️ እባክዎ ትክክለኛ የብር መጠን ቁጥር ብቻ ያስገቡ:');
+            }
+            if (user.balance < amount) {
+                delete userSteps[userId];
+                return ctx.reply(`❌ በቂ ባላንስ የለዎትም! (ያሎት: ETB ${user.balance})`, mainKeyboard);
+            }
+
+            user.balance -= amount;
+            await user.save();
+
+            delete userSteps[userId];
+
+            let assignedAdminId = user.assignedAdminId || OWNER_ID;
+            let newReq = new RequestModel({
+                userId,
+                assignedAdminId,
+                userName: user.userName,
+                type: 'withdraw',
+                amount,
+                details: user.phone || 'N/A'
+            });
+            await newReq.save();
+
+            bot.telegram.sendMessage(
+                assignedAdminId,
+                `📥 **አዲስ የዊዝድሮ ጥያቄ!**\n\n👤 **ስም:** ${user.userName} (ID: \`${userId}\`)\n💰 **መጠን:** ETB ${amount}\n📱 **ስልክ:** ${user.phone}`,
+                { parse_mode: 'Markdown' }
+            ).catch(()=>{});
+
+            return ctx.reply(`✅ የዊዝድሮ ጥያቄዎ በተሳካ ሁኔታ ተልኳል! አድሚን ሲያረጋግጥልዎት በቴሌብር/ባንክ ይላክልዎታል።`, mainKeyboard);
+        }
+
+        else if (step.action === 'comment_waiting') {
+            delete userSteps[userId];
+            let userDoc = await User.findOne({ userId });
+            let assignedAdminId = userDoc?.assignedAdminId || OWNER_ID;
+
+            let newComment = new CommentModel({
+                userId,
+                assignedAdminId,
+                userName: userDoc?.userName || 'ተጫዋች',
+                message: text
+            });
+            await newComment.save();
+
+            bot.telegram.sendMessage(
+                assignedAdminId,
+                `💬 **አዲስ ኮሜንት መጣ!**\n\n👤 **ከ:** ${userDoc?.userName} (ID: \`${userId}\`)\n📝 **መልእክት:** "${text}"`,
+                { parse_mode: 'Markdown' }
+            ).catch(()=>{});
+
+            return ctx.reply(`✅ አስተያየትዎ ለአድሚን ተልኳል! እናመሰግናለን።`, mainKeyboard);
+        }
+
+        else if (step.action === 'admin_reply_comment') {
+            let commentId = step.commentId;
+            delete userSteps[userId];
+
+            let comment = await CommentModel.findById(commentId);
+            if (!comment) return ctx.reply('❌ ኮሜንቱ አልተገኘም!');
+
+            comment.adminReply = text;
+            await comment.save();
+
+            bot.telegram.sendMessage(
+                comment.userId,
+                `📥 **ከአድሚን የተሰጠ ምላሽ:**\n\n${text}`
+            ).catch(()=>{});
+
+            return ctx.reply(`✅ ምላሹ ለተጫዋች ተልኳል!`);
+        }
+
+        else if (step.action === 'admin_deposit_id') {
+            let targetUserId = parseInt(text);
+            if (isNaN(targetUserId)) {
+                delete userSteps[userId];
+                return ctx.reply('⚠️ ትክክለኛ ID አይደለም።', adminKeyboard);
+            }
+            userSteps[userId] = { action: 'admin_deposit_amount', targetUserId };
+            return ctx.reply(`💵 ለተጫዋች (ID: \`${targetUserId}\`) ገቢ ሊደረግ የሚፈልገውን **የብር መጠን** ያስገቡ:`, { parse_mode: 'Markdown' });
+        }
+
+        else if (step.action === 'admin_deposit_amount') {
+            let amount = parseFloat(text);
+            let targetUserId = step.targetUserId;
             delete userSteps[userId];
 
             if (isNaN(amount) || amount <= 0) {
-                return ctx.reply(`❌ እባክዎ ትክክለኛ የብር መጠን ያስገቡ!`);
+                return ctx.reply('⚠️ ትክክለኛ መጠን አይደለም።', adminKeyboard);
             }
 
-            let targetUser = await User.findOne({ userId: targetId });
-            if (!targetUser) return ctx.reply(`❌ ተጫዋቹ አልተገኘም!`);
-
+            let targetUser = await getOrCreateUser(targetUserId);
             targetUser.balance += amount;
             await targetUser.save();
 
             bot.telegram.sendMessage(
-                targetId,
-                `🎉 **እንኳን ደስ አሎት!** አድሚኑ አካውንትዎ ላይ **ETB ${amount}** ጨምረዋል!\n💼 አሁን ያለዎት ባላንስ: **ETB ${targetUser.balance}**`
+                targetUserId,
+                `🎉 **አድሚን አካውንትዎ ላይ ETB ${amount} ገቢ አድርገዋል!**\n💰 አጠቃላይ ባላንስዎ: **ETB ${targetUser.balance}**`
             ).catch(()=>{});
 
-            return ctx.reply(`✅ ለተጫዋች **${targetUser.userName}** (ID: \`${targetId}\`) 💰 **ETB ${amount}** በተሳካ ሁኔታ ገቢ ተደርጓል!`, adminKeyboard);
+            return ctx.reply(`✅ ለተጫዋች **${targetUser.userName}** (ID: \`${targetUserId}\`) ETB ${amount} በተሳካ ሁኔታ ገቢ ተደርጓል!`, adminKeyboard);
         }
     }
 });
 
-bot.launch();
+bot.launch().then(() => {
+    console.log('🤖 Telegram Bot started successfully!');
+});
+
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
+
 app.listen(PORT, () => {
     console.log(`🚀 Server is running on port ${PORT}`);
-});
+});፟
