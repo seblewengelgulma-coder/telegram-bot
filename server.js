@@ -298,24 +298,31 @@ app.get('/api/user/:userId', async (req, res) => {
     }
 });
 
-// 🎯 የተጠየቀው /api/bingo/timeout ማስተካከያ ኤንድፖይንት (ተጫዋች ወጥቶ ገንዘቡ እንዳይባክን የተስተካከለ)
+// 🎯 የተስተካከለው /api/bingo/timeout ኤንድፖይንት (ጨዋታ ከመጀመሩ በፊት ከወጣ ገንዘቡ ይመለሳል፣ ከጀመረ በኋላ ግን አይመለስም)
 app.post('/api/bingo/timeout', async (req, res) => {
     try {
         const { userId, gameId } = req.body;
         let game = await BingoGame.findOne({ gameId });
-        if (game && game.status === 'waiting' && game.players.length < 2) {
-            game.status = 'cancelled';
-            await game.save();
+        
+        // ጨዋታው ገና waiting ላይ ከሆነ ብቻ ተጫዋቹ ሲወጣ ገንዘቡ ይመለሳል
+        if (game && game.status === 'waiting') {
+            // ከ waitingRoom players ዝርዝር ውስጥ ይህንን ተጫዋች እናወጣዋለን
+            for (let costKey in waitingRoom) {
+                if (waitingRoom[costKey].gameId === gameId) {
+                    waitingRoom[costKey].players = waitingRoom[costKey].players.filter(p => p.userId !== Number(userId));
+                }
+            }
 
             let user = await User.findOne({ userId: Number(userId) });
-            if (user) {
+            if (user && !isAdmin(Number(userId))) {
                 user.balance += game.cost;
                 if (user.totalGames > 0) user.totalGames -= 1;
                 await user.save();
-                return res.json({ success: true, newBalance: user.balance });
+                return res.json({ success: true, newBalance: user.balance, message: 'ጨዋታው ሳይጀምር ስለወጡ ገንዘብዎ ተመልሷል።' });
             }
         }
-        res.json({ success: false, message: 'Already started or processed' });
+        // ጨዋታው ጀምሮ ከሆነ (Active) ተጫዋቹ ቢወጣም ገንዘቡ አይመለስም (የሌሎች ጨዋታ አይቋረጥም)
+        res.json({ success: false, message: 'Game already active or processed. No refund after start.' });
     } catch (err) {
         res.status(500).json({ success: false, message: 'Server error' });
     }
@@ -850,7 +857,7 @@ bot.command('addadmin', (ctx) => {
         subAdmins.push(targetId);
         return ctx.reply(`✅ ዩዘር ID \`${targetId}\` ያለው አዲስ ረዳት አድሚን ተጨምሯል!`, { parse_mode: 'Markdown' });
     }
-    ctx.reply('⚠️️ እባክዎ ትክክለኛ ID ያስገቡ። ምሳሌ፦ `/addadmin 123456789`');
+    ctx.reply('⚠ እባክዎ ትክክለኛ ID ያስገቡ። ምሳሌ፦ `/addadmin 123456789`');
 });
 
 bot.command('removeadmin', (ctx) => {
@@ -1054,6 +1061,7 @@ function runBingoQueue(cost, gameId) {
         if (countdown <= 0) {
             clearInterval(countdownInterval);
 
+            // ተጫዋች ከ 2 በታች ከሆነ ጨዋታው ይሰረዛል
             if (room.length < 2) {
                 await BingoGame.findOneAndUpdate({ gameId }, { status: 'cancelled' });
 
@@ -1130,6 +1138,7 @@ function runBingoQueue(cost, gameId) {
 
                 for (let pId of session.roomPlayers) {
                     let userGame = activeGames[pId];
+                    // ተጫዋቹ ኔትወርክ አቋርጦ ቢወጣም/ቢያቋርጥም የሌሎቹ ጨዋታ እንዳይቋረጥ try/catch እና የአባላት ማጣሪያ ይረዳል
                     if (userGame && userGame.gameId === activeGameSessionId && userGame.messageId) {
                         try {
                             let messageText = 
@@ -1441,10 +1450,15 @@ bot.hears('👤 ፕሮፋይል (Profile)', async (ctx) => {
     );
 });
 
+// 🎯 የተስተካከለው የኮሜንት በተን (Comment Button) - ተጫዋቹ ሲነካው በቀጥታ ወደ አድሚን ወይም ወደ ቻናሉ እንዲወስድ (Url Button በመጠቀም)
 bot.hears('💬 ኮሜንት (Comment)', (ctx) => {
-    const userId = ctx.from.id;
-    userSteps[userId] = { action: 'comment_waiting' };
-    ctx.reply(`💬 ለአድሚን ማስተላለፍ የሚፈልጉትን **አስተያየት፣ ጥያቄ ወይም ስክሪንሾት ፎቶ** ይላኩ፦`);
+    ctx.reply(
+        `💬 **የእፉዬ ቢንጎ እና ጨዋታዎች ማዕከል**\n\nእባክዎ አስተያየትዎን ወይም ጥያቄዎን በቀጥታ ለአድሚናችን ወይም ወደ ቻናላችን ለማድረስ ከታች ያለውን ሊንክ ይጠቀሙ፦`,
+        Markup.inlineKeyboard([
+            [Markup.button.url('📢 የእፉዬ ቢንጎ ቻናል (Channel)', 'https://t.me/teyooava')], // እዚህጋ የናርሶትን ቻናል ሊንክ መቀየር ይችላሉ
+            [Markup.button.url('💬 አድሚንን ማነጋገር (Admin Contact)', 'https://t.me/@Avateddy2709')]     // እዚህጋ የአድሚኑን ዩዘርናም መቀየር ይችላሉ
+        ])
+    );
 });
 
 bot.hears('📖 መመሪያ (Instructions)', (ctx) => {
@@ -1626,7 +1640,6 @@ bot.hears('📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', async (ctx) => {
     if (reqs.length === 0) return ctx.reply('📭 ምንም የሚጠብቅ ጥያቄ የለም።', adminKeyboard);
     
     for (let r of reqs) {
-        // details በጣም ረጅም (ለምሳሌ HTML ከገባበት) እንዳይበላሽ እስከ 100 ፊደል ብቻ እንወስዳለን
         let safeDetails = r.details && r.details.length > 100 ? r.details.substring(0, 100) + '...' : (r.details || 'መረጃ የለም');
         
         let msg = `📌 **አይነት:** ${r.type ? r.type.toUpperCase() : 'UNKNOWN'}\n👤 **ስም:** ${r.userName || 'ተጠቃሚ'} (ID: \`${r.userId}\`)\n💰 **መጠን:** ETB ${r.amount}\n📱 **አካውንት:** \`${safeDetails}\``;
@@ -1643,10 +1656,10 @@ bot.hears('📥 የዲፖዚት/ዊዝድሮ ጥያቄዎች', async (ctx) => {
             }
         } catch (err) {
             console.error('Error sending request message:', err.message);
-            // አንዱ ጥያቄ ሲበላሽ ሌሎቹ እንዳይቋረጡ try/catch ተጠቅመናል
         }
     }
 });
+
 bot.hears('💬 የተጫዋቾች ኮሜንቶች', async (ctx) => {
     if (!isAdmin(ctx.from.id)) return;
     
@@ -1847,7 +1860,7 @@ bot.action(/reply_comment_(.+)/, async (ctx) => {
     let commentId = ctx.match[1];
     userSteps[ctx.from.id] = { action: 'admin_reply_comment', commentId };
     ctx.answerCbQuery();
-    ctx.reply(`✍️ ለዚህ ኮሜንት የሚሰጡትን ምላሽ ይላኩ፦`);
+    ctx.reply(`✍️️ ለዚህ ኮሜንት የሚሰጡትን ምላሽ ይላኩ፦`);
 });
 
 bot.on('photo', async (ctx) => {
